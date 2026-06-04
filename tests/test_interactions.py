@@ -1,9 +1,73 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind
+from optcg_card_bot.errors import PoneglyphRateLimitError
 from optcg_card_bot.interactions import (
     CardSelectView,
     build_choice_options,
     create_bot,
+    send_error,
+    send_outcome,
 )
+from optcg_card_bot.models import CardDetailResponse
 from optcg_card_bot.search import CardChoice
+
+FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
+
+
+class FakeFollowup:
+    def __init__(self) -> None:
+        self.sends: list[dict[str, object]] = []
+
+    async def send(self, *args: object, **kwargs: object) -> None:
+        self.sends.append({"args": args, **kwargs})
+
+
+class FakeChannel:
+    def __init__(self) -> None:
+        self.sends: list[dict[str, object]] = []
+
+    async def send(self, *args: object, **kwargs: object) -> None:
+        self.sends.append({"args": args, **kwargs})
+
+
+class FakeInteraction:
+    def __init__(self) -> None:
+        self.followup = FakeFollowup()
+        self.channel = FakeChannel()
+        self.response = FakeResponse()
+        self.user = FakeUser()
+
+
+class FakeResponse:
+    def __init__(self) -> None:
+        self.defers: list[dict[str, object]] = []
+
+    async def defer(self, **kwargs: object) -> None:
+        self.defers.append(kwargs)
+
+
+class FakeUser:
+    id = 123
+
+
+class FakeService:
+    def __init__(self, outcome: CommandOutcome | None = None) -> None:
+        self.outcome = outcome
+
+    async def card(self, query: str) -> CommandOutcome:
+        if self.outcome is None:
+            raise PoneglyphRateLimitError
+        return self.outcome
+
+
+def load_card():
+    return CardDetailResponse.model_validate(
+        json.loads((FIXTURES / "card_op01_001.json").read_text())
+    ).data
 
 
 def test_choice_options_include_card_number_and_name() -> None:
@@ -52,3 +116,88 @@ def test_create_bot_registers_expected_commands() -> None:
     names = {command.name for command in bot.tree.get_commands()}
 
     assert {"card", "search", "random", "faq", "help"} <= names
+
+
+@pytest.mark.asyncio
+async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_card_command_posts_direct_public_outcome_to_channel() -> None:
+    interaction = FakeInteraction()
+    bot = create_bot(
+        command_service=FakeService(
+            CommandOutcome(
+                kind=CommandOutcomeKind.PUBLIC_CARD,
+                card=load_card(),
+            )
+        )
+    )
+    command = bot.tree.get_command("card")
+    assert command is not None
+
+    await command.callback(interaction, "OP01-001")
+
+    assert interaction.response.defers == [{"ephemeral": True}]
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_bot_error_sends_user_message_ephemerally() -> None:
+    interaction = FakeInteraction()
+
+    await send_error(interaction, PoneglyphRateLimitError())
+
+    assert interaction.followup.sends == [
+        {
+            "args": ("Poneglyph is rate-limiting requests. Please try again soon.",),
+            "ephemeral": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_card_command_bot_error_sends_user_message_ephemerally() -> None:
+    interaction = FakeInteraction()
+    bot = create_bot(command_service=FakeService())
+    command = bot.tree.get_command("card")
+    assert command is not None
+
+    await command.callback(interaction, "OP01-001")
+
+    assert interaction.response.defers == [{"ephemeral": True}]
+    assert interaction.followup.sends == [
+        {
+            "args": ("Poneglyph is rate-limiting requests. Please try again soon.",),
+            "ephemeral": True,
+        }
+    ]
+    assert interaction.channel.sends == []
+
+
+@pytest.mark.asyncio
+async def test_bot_setup_hook_syncs_command_tree(monkeypatch) -> None:
+    bot = create_bot(command_service=None)
+    calls: list[str] = []
+
+    async def fake_sync() -> None:
+        calls.append("sync")
+
+    monkeypatch.setattr(bot.tree, "sync", fake_sync)
+
+    await bot.setup_hook()
+
+    assert calls == ["sync"]
