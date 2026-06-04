@@ -8,6 +8,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
+from pydantic import ValidationError
 
 from optcg_card_bot.errors import (
     NoSearchResultsError,
@@ -84,7 +85,10 @@ class PoneglyphClient:
             params["order"] = order
 
         payload = await self._request_json("GET", "/search", params=params)
-        return SearchResponse.model_validate(payload)
+        try:
+            return SearchResponse.model_validate(payload)
+        except ValidationError as exc:
+            raise PoneglyphServerError from exc
 
     async def get_card(self, card_number: str, *, lang: str = "en") -> CardDetail:
         encoded_card_number = quote(card_number.upper(), safe="")
@@ -93,7 +97,10 @@ class PoneglyphClient:
             f"/cards/{encoded_card_number}",
             params={"lang": lang},
         )
-        return CardDetailResponse.model_validate(payload).data
+        try:
+            return CardDetailResponse.model_validate(payload).data
+        except ValidationError as exc:
+            raise PoneglyphServerError from exc
 
     async def get_random(
         self,
@@ -116,7 +123,10 @@ class PoneglyphClient:
             if value is not None
         }
         payload = await self._request_json("GET", "/random", params=params)
-        return RandomCardResponse.model_validate(payload).data
+        try:
+            return RandomCardResponse.model_validate(payload).data
+        except ValidationError as exc:
+            raise PoneglyphServerError from exc
 
     async def get_random_from_query(
         self,

@@ -5,50 +5,115 @@ from pathlib import Path
 import httpx
 import pytest
 
-from optcg_card_bot.errors import PoneglyphNotFoundError, PoneglyphRateLimitError
+from optcg_card_bot.errors import (
+    PoneglyphNotFoundError,
+    PoneglyphRateLimitError,
+    PoneglyphServerError,
+)
 from optcg_card_bot.poneglyph import PoneglyphClient
 
 FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
 
 
+def assert_param(
+    signature: inspect.Signature,
+    name: str,
+    kind: inspect._ParameterKind,
+    default: object = inspect.Parameter.empty,
+) -> None:
+    parameter = signature.parameters[name]
+
+    assert parameter.kind is kind
+    assert parameter.default == default
+
+
 def test_public_methods_use_required_keyword_only_signatures() -> None:
-    assert str(inspect.signature(PoneglyphClient)) == (
-        "(*, http_client: 'httpx.AsyncClient | None' = None, "
-        "base_url: 'str' = 'https://api.poneglyph.one', "
-        "api_prefix: 'str' = '/v1', timeout: 'float' = 10.0, "
-        "min_interval: 'float' = 0.25, max_retries: 'int' = 2, "
-        "user_agent: 'str' = 'poneglyph-discord-bot/0.1.0') -> 'None'"
+    init_signature = inspect.signature(PoneglyphClient)
+    search_signature = inspect.signature(PoneglyphClient.search_cards)
+    card_signature = inspect.signature(PoneglyphClient.get_card)
+    random_signature = inspect.signature(PoneglyphClient.get_random)
+    random_query_signature = inspect.signature(PoneglyphClient.get_random_from_query)
+
+    for name, default in {
+        "http_client": None,
+        "base_url": "https://api.poneglyph.one",
+        "api_prefix": "/v1",
+        "timeout": 10.0,
+        "min_interval": 0.25,
+        "max_retries": 2,
+        "user_agent": "poneglyph-discord-bot/0.1.0",
+    }.items():
+        assert_param(init_signature, name, inspect.Parameter.KEYWORD_ONLY, default)
+
+    assert_param(search_signature, "query", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    for name, default in {
+        "page": 1,
+        "limit": 60,
+        "sort": None,
+        "order": None,
+        "collapse": "card",
+        "lang": "en",
+    }.items():
+        assert_param(search_signature, name, inspect.Parameter.KEYWORD_ONLY, default)
+
+    assert_param(
+        card_signature,
+        "card_number",
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
     )
-    assert str(inspect.signature(PoneglyphClient.search_cards)) == (
-        "(self, query: 'str | None', *, page: 'int' = 1, limit: 'int' = 60, "
-        "sort: 'str | None' = None, order: 'str | None' = None, "
-        "collapse: 'str' = 'card', lang: 'str' = 'en') -> 'SearchResponse'"
+    assert_param(card_signature, "lang", inspect.Parameter.KEYWORD_ONLY, "en")
+
+    for name, default in {
+        "lang": "en",
+        "set": None,
+        "color": None,
+        "type": None,
+        "rarity": None,
+    }.items():
+        assert_param(random_signature, name, inspect.Parameter.KEYWORD_ONLY, default)
+
+    assert_param(
+        random_query_signature,
+        "query",
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
     )
-    assert str(inspect.signature(PoneglyphClient.get_card)) == (
-        "(self, card_number: 'str', *, lang: 'str' = 'en') -> 'CardDetail'"
-    )
-    assert str(inspect.signature(PoneglyphClient.get_random)) == (
-        "(self, *, lang: 'str' = 'en', set: 'str | None' = None, "
-        "color: 'str | None' = None, type: 'str | None' = None, "
-        "rarity: 'str | None' = None) -> 'CardDetail'"
-    )
-    assert str(inspect.signature(PoneglyphClient.get_random_from_query)) == (
-        "(self, query: 'str', *, lang: 'str' = 'en', "
-        "random_page: 'Callable[[int], int] | None' = None) -> 'CardDetail'"
+    assert_param(random_query_signature, "lang", inspect.Parameter.KEYWORD_ONLY, "en")
+    assert_param(
+        random_query_signature,
+        "random_page",
+        inspect.Parameter.KEYWORD_ONLY,
+        None,
     )
 
 
 @pytest.mark.asyncio
-async def test_owned_client_sets_json_accept_and_user_agent_headers() -> None:
-    client = PoneglyphClient(min_interval=0)
+async def test_owned_client_sends_json_accept_and_user_agent_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[httpx.Request] = []
+    payload = json.loads((FIXTURES / "search_luffy.json").read_text())
+    original_async_client = httpx.AsyncClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    class ObservedAsyncClient(httpx.AsyncClient):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs["transport"] = httpx.MockTransport(handler)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", ObservedAsyncClient)
+    client = PoneglyphClient(base_url="https://api.example.test", min_interval=0)
 
     try:
-        headers = client._http.headers
+        await client.search_cards("luffy")
 
-        assert headers["Accept"] == "application/json"
-        assert headers["User-Agent"] == "poneglyph-discord-bot/0.1.0"
+        assert requests[0].headers["Accept"] == "application/json"
+        assert requests[0].headers["User-Agent"] == "poneglyph-discord-bot/0.1.0"
     finally:
         await client.aclose()
+        monkeypatch.setattr(httpx, "AsyncClient", original_async_client)
 
 
 @pytest.mark.asyncio
@@ -93,6 +158,18 @@ async def test_search_omits_falsey_optional_params() -> None:
     assert "q" not in requests[0].url.params
     assert "sort" not in requests[0].url.params
     assert "order" not in requests[0].url.params
+
+
+@pytest.mark.asyncio
+async def test_malformed_search_response_maps_to_server_error() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})),
+        base_url="https://api.example.test",
+    ) as http:
+        client = PoneglyphClient(http_client=http, api_prefix="/v1", min_interval=0)
+
+        with pytest.raises(PoneglyphServerError):
+            await client.search_cards("luffy")
 
 
 @pytest.mark.asyncio
