@@ -81,6 +81,27 @@ async def test_ambiguous_query_returns_choices() -> None:
     assert client.queries_requested == ["luffy"]
 
 
+@pytest.mark.asyncio
+async def test_truncated_ambiguous_query_returns_available_choices() -> None:
+    client = FakeClient()
+    client.search_response = client.search_response.model_copy(
+        update={
+            "data": client.search_response.data[:1],
+            "pagination": client.search_response.pagination.model_copy(
+                update={"total": 2}
+            ),
+        }
+    )
+
+    resolution = await resolve_card_query(client, "luffy")
+
+    assert resolution.kind is ResolutionKind.MULTIPLE
+    assert resolution.card is None
+    assert len(resolution.choices) == 1
+    assert client.card_numbers_requested == []
+    assert client.queries_requested == ["luffy"]
+
+
 def test_extract_bracket_queries_for_phase_two() -> None:
     assert extract_bracket_queries("play [[luffy]] and [[OP01-001]]") == [
         "luffy",

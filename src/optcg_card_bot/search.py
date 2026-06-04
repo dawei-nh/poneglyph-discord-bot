@@ -95,7 +95,7 @@ async def resolve_card_query(
     )
     if response.pagination.total == 0 or not response.data:
         return CardResolution(kind=ResolutionKind.NOT_FOUND, query=raw_query)
-    if response.pagination.total == 1 or len(response.data) == 1:
+    if response.pagination.total == 1:
         card = await client.get_card(response.data[0].card_number, lang=lang)
         return CardResolution(kind=ResolutionKind.SINGLE, query=raw_query, card=card)
     return CardResolution(
