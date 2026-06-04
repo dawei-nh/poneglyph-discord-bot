@@ -1,0 +1,155 @@
+{
+  "data": [
+    {
+      "attribute": [
+        "Slash"
+      ],
+      "block": "1",
+      "card_number": "OP01-001",
+      "card_type": "Leader",
+      "color": [
+        "Red"
+      ],
+      "cost": null,
+      "counter": null,
+      "effect": "[DON!! x1] [Your Turn] All of your Characters gain +1000 power.",
+      "language": "en",
+      "life": 5,
+      "name": "Roronoa Zoro",
+      "power": 5000,
+      "rarity": "L",
+      "released": true,
+      "released_at": "2022-12-02T00:00:00.000Z",
+      "set": "OP01",
+      "set_name": "One Piece 1",
+      "trigger": null,
+      "types": [
+        "Supernovas",
+        "Straw Hat Crew"
+      ],
+      "variants": [
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": 0.500544,
+            "y": 0.140271
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/OP01-001/en/stock/0/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/OP01-001/en/stock/0/thumb.webp"
+            }
+          },
+          "index": 0,
+          "label": "Standard",
+          "market": {
+            "high_price": "9.99",
+            "low_price": "1.00",
+            "market_price": "1.91",
+            "mid_price": "2.25",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/454512/one-piece-card-game-romance-dawn-roronoa-zoro-001"
+          },
+          "name": null,
+          "product": {
+            "id": "9c438d47-c70f-48aa-91c5-c40efa7ca4e0",
+            "name": "Romance Dawn",
+            "released_at": "2022-12-02T00:00:00.000Z",
+            "set_code": "OP01",
+            "slug": "romance-dawn"
+          }
+        },
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": 0.49678,
+            "y": 0.465322
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/thumb.webp"
+            }
+          },
+          "index": 1,
+          "label": "Alternate Art",
+          "market": {
+            "high_price": "1500.00",
+            "low_price": "490.00",
+            "market_price": "558.38",
+            "mid_price": "600.00",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/454513/one-piece-card-game-romance-dawn-roronoa-zoro-001-parallel"
+          },
+          "name": null,
+          "product": {
+            "id": "9c438d47-c70f-48aa-91c5-c40efa7ca4e0",
+            "name": "Romance Dawn",
+            "released_at": "2022-12-02T00:00:00.000Z",
+            "set_code": "OP01",
+            "slug": "romance-dawn"
+          }
+        },
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": 0.622857,
+            "y": 0.199616
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/thumb.webp"
+            }
+          },
+          "index": 2,
+          "label": "Alternate Art",
+          "market": {
+            "high_price": "300.00",
+            "low_price": "60.96",
+            "market_price": "62.19",
+            "mid_price": "82.44",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/485262/one-piece-card-game-one-piece-promotion-cards-roronoa-zoro-op01-001-alternate-art"
+          },
+          "name": null,
+          "product": {
+            "id": "a0f9a57e-c9a0-40b9-9e00-6136a62ffef8",
+            "name": "25th Edition",
+            "released_at": null,
+            "set_code": null,
+            "slug": "25th-edition"
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "order_applied": "asc",
+    "order_requested": "asc",
+    "relevance_active": false,
+    "sort_applied": "card_number",
+    "sort_requested": "card_number"
+  },
+  "pagination": {
+    "has_more": false,
+    "limit": 5,
+    "page": 1,
+    "total": 1
+  }
+}
