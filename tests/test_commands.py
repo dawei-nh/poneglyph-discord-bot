@@ -18,6 +18,7 @@ class FakeClient:
             json.loads((FIXTURES / "search_luffy.json").read_text())
         )
         self.random_card = self.card
+        self.get_random_kwargs: dict[str, str] = {}
 
     async def get_card(self, card_number: str, *, lang: str = "en"):
         return self.card
@@ -36,6 +37,7 @@ class FakeClient:
         return self.search_response
 
     async def get_random(self, **kwargs):
+        self.get_random_kwargs = kwargs
         return self.random_card
 
     async def get_random_from_query(self, query: str, *, lang: str = "en"):
@@ -80,6 +82,28 @@ async def test_random_empty_query_uses_random_endpoint() -> None:
 
     assert outcome.kind is CommandOutcomeKind.PUBLIC_CARD
     assert outcome.card is not None
+
+
+@pytest.mark.asyncio
+async def test_random_filter_lang_overrides_default_language() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    outcome = await service.random("lang:ja")
+
+    assert outcome.kind is CommandOutcomeKind.PUBLIC_CARD
+    assert client.get_random_kwargs == {"lang": "ja"}
+
+
+@pytest.mark.asyncio
+async def test_random_filter_uses_default_language_without_lang_filter() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    outcome = await service.random("color:red")
+
+    assert outcome.kind is CommandOutcomeKind.PUBLIC_CARD
+    assert client.get_random_kwargs == {"lang": "en", "color": "red"}
 
 
 @pytest.mark.asyncio

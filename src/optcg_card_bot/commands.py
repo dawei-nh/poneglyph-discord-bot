@@ -114,8 +114,9 @@ class CommandService:
                     lang=self._default_language,
                 )
             else:
+                lang = filters.pop("lang", self._default_language)
                 card = await self._client.get_random(
-                    lang=self._default_language,
+                    lang=lang,
                     **filters,
                 )
         return CommandOutcome(
