@@ -98,6 +98,7 @@ async def send_outcome(
         if public_channel and hasattr(interaction.channel, "send"):
             channel = cast("Messageable", interaction.channel)
             await channel.send(embed=embed)
+            await _clear_original_response(interaction)
         else:
             await interaction.followup.send(embed=embed, ephemeral=False)
         return
@@ -106,6 +107,7 @@ async def send_outcome(
         if public_channel and hasattr(interaction.channel, "send"):
             channel = cast("Messageable", interaction.channel)
             await channel.send(embed=embed)
+            await _clear_original_response(interaction)
         else:
             await interaction.followup.send(embed=embed, ephemeral=False)
         return
@@ -117,6 +119,14 @@ async def send_outcome(
 
 async def send_error(interaction: discord.Interaction, error: BotError) -> None:
     await interaction.followup.send(error.user_message, ephemeral=True)
+
+
+async def _clear_original_response(interaction: discord.Interaction) -> None:
+    if hasattr(interaction, "delete_original_response"):
+        await interaction.delete_original_response()
+        return
+    if hasattr(interaction, "edit_original_response"):
+        await interaction.edit_original_response(content="Posted publicly.", view=None)
 
 
 class SyncingBot(commands.Bot):

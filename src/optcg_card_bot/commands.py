@@ -25,7 +25,15 @@ class CommandClient(Protocol):
         lang: str = "en",
     ) -> SearchResponse: ...
 
-    async def get_random(self, **kwargs: str) -> CardDetail: ...
+    async def get_random(
+        self,
+        *,
+        lang: str = "en",
+        set: str | None = None,
+        color: str | None = None,
+        type: str | None = None,
+        rarity: str | None = None,
+    ) -> CardDetail: ...
 
     async def get_random_from_query(
         self, query: str, *, lang: str = "en"

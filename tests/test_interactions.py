@@ -40,6 +40,24 @@ class FakeInteraction:
         self.channel = FakeChannel()
         self.response = FakeResponse()
         self.user = FakeUser()
+        self.deleted_original_response = False
+        self.edits: list[dict[str, object]] = []
+
+    async def delete_original_response(self) -> None:
+        self.deleted_original_response = True
+
+    async def edit_original_response(self, **kwargs: object) -> None:
+        self.edits.append(kwargs)
+
+
+class FakeInteractionWithoutDelete:
+    def __init__(self) -> None:
+        self.followup = FakeFollowup()
+        self.channel = FakeChannel()
+        self.edits: list[dict[str, object]] = []
+
+    async def edit_original_response(self, **kwargs: object) -> None:
+        self.edits.append(kwargs)
 
 
 class FakeResponse:
@@ -130,6 +148,23 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
 
     assert len(interaction.channel.sends) == 1
     assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
+    assert interaction.edits == []
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_public_outcome_edits_original_response_when_delete_unavailable() -> None:
+    interaction = FakeInteractionWithoutDelete()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    assert len(interaction.channel.sends) == 1
+    assert interaction.edits == [{"content": "Posted publicly.", "view": None}]
     assert interaction.followup.sends == []
 
 
@@ -152,6 +187,7 @@ async def test_card_command_posts_direct_public_outcome_to_channel() -> None:
     assert interaction.response.defers == [{"ephemeral": True}]
     assert len(interaction.channel.sends) == 1
     assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
     assert interaction.followup.sends == []
 
 
