@@ -10,7 +10,7 @@ from discord.ext import commands
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind, CommandService
 from optcg_card_bot.embeds import build_card_embed, build_faq_embed
 from optcg_card_bot.errors import BotError
-from optcg_card_bot.search import CardChoice
+from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
 
 def build_choice_options(choices: tuple[CardChoice, ...]) -> list[discord.SelectOption]:
@@ -134,7 +134,11 @@ class SyncingBot(commands.Bot):
         await self.tree.sync()
 
 
-def create_bot(command_service: CommandService | None) -> commands.Bot:
+def create_bot(
+    command_service: CommandService | None,
+    *,
+    enable_bracket_messages: bool = False,
+) -> commands.Bot:
     intents = discord.Intents.default()
     bot = SyncingBot(command_prefix=commands.when_mentioned, intents=intents)
 
@@ -231,6 +235,30 @@ def create_bot(command_service: CommandService | None) -> commands.Bot:
         await interaction.response.send_message(service.help().message, ephemeral=True)
 
     _registered_commands = (card, search, random_card, faq, help_command)
+    if enable_bracket_messages:
+
+        @bot.listen("on_message")
+        async def on_message(message: discord.Message) -> None:
+            if message.author.bot:
+                return
+            service = _require_service(command_service)
+            for query in extract_bracket_queries(message.content):
+                try:
+                    outcome = await service.card(query)
+                except BotError as error:
+                    await message.channel.send(error.user_message)
+                    continue
+                if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card:
+                    await message.channel.send(embed=build_card_embed(outcome.card))
+                elif outcome.kind is CommandOutcomeKind.PICKER:
+                    await message.channel.send(
+                        f"`[[{query}]]` matched multiple cards. Use `/card` to choose."
+                    )
+                elif outcome.message:
+                    await message.channel.send(outcome.message)
+
+        _registered_events = (on_message,)
+
     return bot
 
 

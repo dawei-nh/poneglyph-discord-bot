@@ -12,6 +12,13 @@ embeds.
 - `/faq card:<card number or query>` posts official FAQ entries only.
 - `/help` shows command help and links to Poneglyph syntax docs.
 
+## Phase 2 Message Lookup
+
+Set `OPTCG_ENABLE_BRACKET_MESSAGES=true` to enable `[[card-name]]` message
+detection. Bracket lookups use the same resolver as `/card`: direct and
+single-result matches post publicly, while ambiguous matches tell the user to
+use `/card` for selection.
+
 ## Development
 
 Enter the Nix development shell first:

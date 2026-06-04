@@ -136,6 +136,12 @@ def test_create_bot_registers_expected_commands() -> None:
     assert {"card", "search", "random", "faq", "help"} <= names
 
 
+def test_create_bot_can_enable_bracket_listener() -> None:
+    bot = create_bot(command_service=None, enable_bracket_messages=True)
+
+    assert "on_message" in bot.extra_events
+
+
 @pytest.mark.asyncio
 async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     interaction = FakeInteraction()

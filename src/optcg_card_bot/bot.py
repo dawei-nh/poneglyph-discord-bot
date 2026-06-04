@@ -14,7 +14,10 @@ async def run_bot(settings: Settings) -> None:
         min_interval=settings.request_min_interval_seconds,
     )
     service = CommandService(client, default_language=settings.default_language)
-    bot = create_bot(service)
+    bot = create_bot(
+        service,
+        enable_bracket_messages=settings.enable_bracket_messages,
+    )
     try:
         async with bot:
             await bot.start(settings.discord_token)
