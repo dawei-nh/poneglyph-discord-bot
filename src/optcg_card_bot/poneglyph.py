@@ -31,6 +31,7 @@ QueryParams = Mapping[str, str | int | float | bool | None]
 class PoneglyphClient:
     def __init__(
         self,
+        *,
         http_client: httpx.AsyncClient | None = None,
         base_url: str = "https://api.poneglyph.one",
         api_prefix: str = "/v1",
@@ -43,7 +44,10 @@ class PoneglyphClient:
         self._http = http_client or httpx.AsyncClient(
             base_url=base_url,
             timeout=timeout,
-            headers={"User-Agent": user_agent},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": user_agent,
+            },
         )
         self._api_prefix = "/" + api_prefix.strip("/")
         self._min_interval = min_interval
@@ -57,7 +61,8 @@ class PoneglyphClient:
 
     async def search_cards(
         self,
-        query: str,
+        query: str | None,
+        *,
         page: int = 1,
         limit: int = 60,
         sort: str | None = None,
@@ -66,21 +71,22 @@ class PoneglyphClient:
         lang: str = "en",
     ) -> SearchResponse:
         params: dict[str, str | int] = {
-            "q": query,
             "page": page,
             "limit": limit,
             "collapse": collapse,
             "lang": lang,
         }
-        if sort is not None:
+        if query:
+            params["q"] = query
+        if sort:
             params["sort"] = sort
-        if order is not None:
+        if order:
             params["order"] = order
 
         payload = await self._request_json("GET", "/search", params=params)
         return SearchResponse.model_validate(payload)
 
-    async def get_card(self, card_number: str, lang: str = "en") -> CardDetail:
+    async def get_card(self, card_number: str, *, lang: str = "en") -> CardDetail:
         encoded_card_number = quote(card_number.upper(), safe="")
         payload = await self._request_json(
             "GET",
@@ -91,6 +97,7 @@ class PoneglyphClient:
 
     async def get_random(
         self,
+        *,
         lang: str = "en",
         set: str | None = None,
         color: str | None = None,
@@ -114,6 +121,7 @@ class PoneglyphClient:
     async def get_random_from_query(
         self,
         query: str,
+        *,
         lang: str = "en",
         random_page: Callable[[int], int] | None = None,
     ) -> CardDetail:
