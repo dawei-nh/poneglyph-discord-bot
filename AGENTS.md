@@ -14,6 +14,8 @@ apply to every agent working in this repo.
 
 ## Implementation Discipline
 
+- Use `nix develop` before running project commands. The shell provides Python
+  3.12, `uv`, Node.js for Pyright, and CA certificates for HTTPS tooling.
 - Use TDD for implementation tasks: write the failing test, run it, implement
   the smallest change, then rerun the task verification commands.
 - Commit after each completed task using the commit message from the plan.

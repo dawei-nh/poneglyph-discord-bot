@@ -14,6 +14,14 @@ embeds.
 
 ## Development
 
+Enter the Nix development shell first:
+
+```bash
+nix develop
+```
+
+Then install Python dependencies and run checks:
+
 ```bash
 uv sync --extra dev
 uv run pytest
