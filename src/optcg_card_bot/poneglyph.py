@@ -141,9 +141,7 @@ class PoneglyphClient:
             raise NoSearchResultsError
 
         page = (
-            random_page(total)
-            if random_page is not None
-            else random.randint(1, total)
+            random_page(total) if random_page is not None else random.randint(1, total)
         )
         selected_page = await self.search_cards(query, page=page, limit=1, lang=lang)
         if not selected_page.data:

@@ -29,3 +29,24 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 ```
+
+## Contract Checks
+
+The repository vendors Poneglyph's OpenAPI document under
+`contracts/poneglyph/openapi.json`.
+
+Refresh deliberately:
+
+```bash
+uv run python scripts/refresh_poneglyph_contracts.py
+```
+
+Run live smoke tests:
+
+```bash
+uv run pytest tests/live -v
+```
+
+Live tests verify endpoint presence, direct `OP01-001` lookup, bare `OP01-001`
+search, and a broad `luffy` search. They do not assert prices, total counts, or
+the currently inconsistent `card_number:OP01-001` search form.

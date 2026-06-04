@@ -157,8 +157,7 @@ class CommandService:
             return CommandOutcome(
                 kind=CommandOutcomeKind.EPHEMERAL_MESSAGE,
                 message=(
-                    "No official FAQ is available for "
-                    f"{card_outcome.card.card_number}."
+                    f"No official FAQ is available for {card_outcome.card.card_number}."
                 ),
                 source_query=query,
             )
