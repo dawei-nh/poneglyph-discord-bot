@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from optcg_card_bot.commands import CommandOutcomeKind, CommandService
+from optcg_card_bot.errors import NoSearchResultsError
 from optcg_card_bot.models import CardDetailResponse, SearchResponse
 
 FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
@@ -19,6 +20,8 @@ class FakeClient:
         )
         self.random_card = self.card
         self.get_random_kwargs: dict[str, str] = {}
+        self.get_random_from_query_args: tuple[str, str] | None = None
+        self.raise_no_search_results = False
 
     async def get_card(self, card_number: str, *, lang: str = "en"):
         return self.card
@@ -41,6 +44,9 @@ class FakeClient:
         return self.random_card
 
     async def get_random_from_query(self, query: str, *, lang: str = "en"):
+        self.get_random_from_query_args = (query, lang)
+        if self.raise_no_search_results:
+            raise NoSearchResultsError
         return self.random_card
 
 
@@ -104,6 +110,20 @@ async def test_random_filter_uses_default_language_without_lang_filter() -> None
 
     assert outcome.kind is CommandOutcomeKind.PUBLIC_CARD
     assert client.get_random_kwargs == {"lang": "en", "color": "red"}
+
+
+@pytest.mark.asyncio
+async def test_random_query_no_results_returns_ephemeral_message() -> None:
+    client = FakeClient()
+    client.raise_no_search_results = True
+    service = CommandService(client)
+
+    outcome = await service.random("does-not-exist")
+
+    assert outcome.kind is CommandOutcomeKind.EPHEMERAL_MESSAGE
+    assert outcome.message == "No matching cards were found."
+    assert outcome.source_query == "does-not-exist"
+    assert client.get_random_from_query_args == ("does-not-exist", "en")
 
 
 @pytest.mark.asyncio

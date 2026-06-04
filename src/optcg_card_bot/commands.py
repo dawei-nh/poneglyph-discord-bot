@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
+from optcg_card_bot.errors import NoSearchResultsError
 from optcg_card_bot.models import CardDetail, FAQEntry, SearchResponse
 from optcg_card_bot.search import CardChoice, ResolutionKind, resolve_card_query
 
@@ -109,10 +110,17 @@ class CommandService:
         else:
             filters = self._parse_simple_random_filters(stripped)
             if filters is None:
-                card = await self._client.get_random_from_query(
-                    stripped,
-                    lang=self._default_language,
-                )
+                try:
+                    card = await self._client.get_random_from_query(
+                        stripped,
+                        lang=self._default_language,
+                    )
+                except NoSearchResultsError:
+                    return CommandOutcome(
+                        kind=CommandOutcomeKind.EPHEMERAL_MESSAGE,
+                        message="No matching cards were found.",
+                        source_query=query,
+                    )
             else:
                 lang = filters.pop("lang", self._default_language)
                 card = await self._client.get_random(
