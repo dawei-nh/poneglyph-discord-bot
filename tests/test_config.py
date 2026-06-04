@@ -83,6 +83,16 @@ def test_settings_token_file_takes_precedence(tmp_path) -> None:
     assert settings.discord_token == "from-file"
 
 
+def test_settings_ignores_blank_discord_token_file(monkeypatch) -> None:
+    monkeypatch.setenv("DISCORD_TOKEN", "from-env")
+    monkeypatch.setenv("DISCORD_TOKEN_FILE", "")
+
+    settings = Settings()
+
+    assert settings.discord_token == "from-env"
+    assert settings.discord_token_file is None
+
+
 def test_settings_rejects_missing_token_file(tmp_path) -> None:
     missing_file = tmp_path / "missing"
 

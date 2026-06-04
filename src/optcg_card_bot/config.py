@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,6 +45,13 @@ class Settings(BaseSettings):
         if not stripped:
             return "/v1"
         return stripped if stripped.startswith("/") else f"/{stripped}"
+
+    @field_validator("discord_token_file", mode="before")
+    @classmethod
+    def normalize_discord_token_file(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def load_discord_token_file(self) -> Self:
