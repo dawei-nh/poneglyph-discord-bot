@@ -1,0 +1,253 @@
+{
+  "data": [
+    {
+      "attribute": [
+        "Strike"
+      ],
+      "block": "3",
+      "card_number": "ST18-005",
+      "card_type": "Character",
+      "color": [
+        "Purple"
+      ],
+      "cost": 7,
+      "counter": null,
+      "effect": "[On Play] DON!! \u22121 (You may return the specified number of DON!! cards from your field to your DON!! deck.): Play up to 1 purple {Straw Hat Crew} type Character card with a cost of 5 or less from your hand.",
+      "language": "en",
+      "life": null,
+      "name": "Luffy-Tarou",
+      "power": 8000,
+      "rarity": "SR",
+      "released": true,
+      "released_at": "2024-10-25T00:00:00.000Z",
+      "set": "ST18",
+      "set_name": "Starter Deck 18",
+      "trigger": null,
+      "types": [
+        "Straw Hat Crew"
+      ],
+      "variants": [
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": null,
+            "y": null
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/ST18-005/en/stock/0/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/ST18-005/en/stock/0/thumb.webp"
+            }
+          },
+          "index": 0,
+          "label": "Standard",
+          "market": {
+            "high_price": "95.00",
+            "low_price": "1.85",
+            "market_price": "3.35",
+            "mid_price": "3.83",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/581035/one-piece-card-game-starter-deck-18-purple-monkeydluffy-luffy-tarou"
+          },
+          "name": null,
+          "product": {
+            "id": "0b33b9ad-6e03-4c30-808a-e685259f5326",
+            "name": "Starter Deck - Purple Monkey.d.luffy",
+            "released_at": "2024-10-25T00:00:00.000Z",
+            "set_code": "ST18",
+            "slug": "starter-deck-purple-monkey-d-luffy"
+          }
+        },
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": null,
+            "y": null
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/ST18-005/en/stock/1/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/ST18-005/en/stock/1/thumb.webp"
+            }
+          },
+          "index": 1,
+          "label": "SP",
+          "market": {
+            "high_price": "2000.00",
+            "low_price": "305.00",
+            "market_price": "400.14",
+            "mid_price": "389.50",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/632509/one-piece-card-game-a-fist-of-divine-speed-luffy-tarou-sp"
+          },
+          "name": null,
+          "product": {
+            "id": "a642472b-3d14-48bf-aa80-b252037be615",
+            "name": "A Fist of Divine Speed",
+            "released_at": "2025-06-06T00:00:00.000Z",
+            "set_code": "OP11",
+            "slug": "a-fist-of-divine-speed"
+          }
+        }
+      ]
+    },
+    {
+      "attribute": null,
+      "block": "3",
+      "card_number": "OP12-039",
+      "card_type": "Event",
+      "color": [
+        "Green"
+      ],
+      "cost": 3,
+      "counter": null,
+      "effect": "[Main] Set your [Roronoa Zoro] Leader as active.",
+      "language": "en",
+      "life": null,
+      "name": "Luffy Is the Man Who Will Become the King of Pirates!!!",
+      "power": null,
+      "rarity": "R",
+      "released": true,
+      "released_at": "2025-08-22T00:00:00.000Z",
+      "set": "OP12",
+      "set_name": "One Piece 12",
+      "trigger": "[Trigger] Up to 1 of your Leader or Character cards gains +1000 power during this turn.",
+      "types": [
+        "Straw Hat Crew"
+      ],
+      "variants": [
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": null,
+            "y": null
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/OP12-039/en/stock/0/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/OP12-039/en/stock/0/thumb.webp"
+            }
+          },
+          "index": 0,
+          "label": "Standard",
+          "market": {
+            "high_price": "25.00",
+            "low_price": "0.05",
+            "market_price": "0.21",
+            "mid_price": "0.28",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/643771/one-piece-card-game-legacy-of-the-master-luffy-is-the-man-who-will-become-the-king-of-pirates"
+          },
+          "name": null,
+          "product": {
+            "id": "51d8d211-3270-417c-a7c7-fba073e783d2",
+            "name": "Legacy of the Master",
+            "released_at": "2025-08-22T00:00:00.000Z",
+            "set_code": "OP12",
+            "slug": "legacy-of-the-master"
+          }
+        },
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": null,
+            "y": null
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": "https://cdn.poneglyph.one/images/OP12-039/en/stock/1/full.png",
+              "thumb": "https://cdn.poneglyph.one/images/OP12-039/en/stock/1/thumb.webp"
+            }
+          },
+          "index": 1,
+          "label": "Alternate Art",
+          "market": {
+            "high_price": "321.86",
+            "low_price": "237.99",
+            "market_price": "241.99",
+            "mid_price": "256.99",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/681982/one-piece-card-game-one-piece-promotion-cards-luffy-is-the-man-who-will-become-the-king-of-pirates-japanese-version-3rd-anniversary-set"
+          },
+          "name": null,
+          "product": {
+            "id": "267b7190-f9ac-4b75-b21d-da5051afa5ad",
+            "name": "Japanese 3rd Anniversary Set",
+            "released_at": null,
+            "set_code": null,
+            "slug": "japanese-3rd-anniversary-set"
+          }
+        },
+        {
+          "artist": null,
+          "crop_focus": {
+            "x": null,
+            "y": null
+          },
+          "errata": [],
+          "images": {
+            "scan": {
+              "display": null,
+              "full": null,
+              "thumb": null
+            },
+            "stock": {
+              "full": null,
+              "thumb": null
+            }
+          },
+          "index": 2,
+          "label": "Reprint",
+          "market": {
+            "high_price": "1.50",
+            "low_price": "0.01",
+            "market_price": "0.07",
+            "mid_price": "0.19",
+            "tcgplayer_url": "https://www.tcgplayer.com/product/656651/one-piece-card-game-learn-together-deck-set-luffy-is-the-man-who-will-become-the-king-of-pirates-zoro-deck"
+          },
+          "name": null,
+          "product": {
+            "id": "90fc7f9f-bc9b-4969-85ea-2ffb2e6a9e74",
+            "name": "Learn Together Deck Set",
+            "released_at": "2025-10-03T00:00:00.000Z",
+            "set_code": null,
+            "slug": "learn-together-deck-set"
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "order_applied": "desc",
+    "order_requested": "asc",
+    "relevance_active": true,
+    "sort_applied": "relevance",
+    "sort_requested": "relevance"
+  },
+  "pagination": {
+    "has_more": true,
+    "limit": 2,
+    "page": 1,
+    "total": 126
+  }
+}
