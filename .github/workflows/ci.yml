@@ -5,8 +5,11 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,3 +28,38 @@ jobs:
         run: uv run pytest tests --ignore=tests/live
       - name: Live contract smoke tests
         run: uv run pytest tests/live -v
+
+  container-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: poneglyph-discord-bot:ci
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: poneglyph-discord-bot:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Python dependency audit
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project --format requirements-txt --output-file requirements-audit.txt
+          uvx --from pip-audit pip-audit -r requirements-audit.txt --strict
