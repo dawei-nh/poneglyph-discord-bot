@@ -8,7 +8,9 @@ from optcg_card_bot.config import Settings
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_settings_defaults() -> None:
+def test_settings_defaults(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+
     settings = Settings(discord_token="token")
 
     assert settings.discord_token == "token"
@@ -20,7 +22,9 @@ def test_settings_defaults() -> None:
     assert settings.enable_bracket_messages is False
 
 
-def test_settings_normalizes_api_prefix() -> None:
+def test_settings_normalizes_api_prefix(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+
     settings = Settings(discord_token="token", poneglyph_api_prefix="v1")
 
     assert settings.poneglyph_api_prefix == "/v1"
