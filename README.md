@@ -12,6 +12,11 @@ embeds.
 - `/faq card:<card number or query>` posts official FAQ entries only.
 - `/help` shows command help and links to Poneglyph syntax docs.
 
+## Docker
+
+See [Docker Deployment](docs/deployment/docker.md) for local image builds,
+Compose secrets, and Docker Hub publish behavior.
+
 ## Phase 2 Message Lookup
 
 Set `OPTCG_ENABLE_BRACKET_MESSAGES=true` to enable `[[card-name]]` message
