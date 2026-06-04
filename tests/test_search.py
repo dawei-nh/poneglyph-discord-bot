@@ -82,6 +82,28 @@ async def test_ambiguous_query_returns_choices() -> None:
 
 
 @pytest.mark.asyncio
+async def test_exactly_one_result_resolution_fetches_detail() -> None:
+    client = FakeClient()
+    returned_card_number = client.search_response.data[0].card_number
+    client.search_response = client.search_response.model_copy(
+        update={
+            "data": client.search_response.data[:1],
+            "pagination": client.search_response.pagination.model_copy(
+                update={"total": 1}
+            ),
+        }
+    )
+
+    resolution = await resolve_card_query(client, "zoro")
+
+    assert resolution.kind is ResolutionKind.SINGLE
+    assert resolution.card is not None
+    assert resolution.choices == ()
+    assert client.card_numbers_requested == [returned_card_number]
+    assert client.queries_requested == ["zoro"]
+
+
+@pytest.mark.asyncio
 async def test_truncated_ambiguous_query_returns_available_choices() -> None:
     client = FakeClient()
     client.search_response = client.search_response.model_copy(
