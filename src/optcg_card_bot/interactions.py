@@ -12,6 +12,8 @@ from optcg_card_bot.embeds import build_card_embed, build_faq_embed
 from optcg_card_bot.errors import BotError
 from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
+MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
+
 
 def build_choice_options(choices: tuple[CardChoice, ...]) -> list[discord.SelectOption]:
     return [
@@ -129,6 +131,19 @@ async def _clear_original_response(interaction: discord.Interaction) -> None:
         await interaction.edit_original_response(content="Posted publicly.", view=None)
 
 
+def prepare_bracket_queries(content: str) -> tuple[str, ...]:
+    queries: list[str] = []
+    seen: set[str] = set()
+    for query in extract_bracket_queries(content):
+        if query in seen:
+            continue
+        queries.append(query)
+        seen.add(query)
+        if len(queries) == MAX_BRACKET_LOOKUPS_PER_MESSAGE:
+            break
+    return tuple(queries)
+
+
 class SyncingBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.tree.sync()
@@ -140,6 +155,8 @@ def create_bot(
     enable_bracket_messages: bool = False,
 ) -> commands.Bot:
     intents = discord.Intents.default()
+    if enable_bracket_messages:
+        intents.message_content = True
     bot = SyncingBot(command_prefix=commands.when_mentioned, intents=intents)
 
     @bot.tree.command(name="card", description="Search and post a Poneglyph card")
@@ -242,7 +259,7 @@ def create_bot(
             if message.author.bot:
                 return
             service = _require_service(command_service)
-            for query in extract_bracket_queries(message.content):
+            for query in prepare_bracket_queries(message.content):
                 try:
                     outcome = await service.card(query)
                 except BotError as error:

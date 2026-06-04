@@ -9,6 +9,7 @@ from optcg_card_bot.interactions import (
     CardSelectView,
     build_choice_options,
     create_bot,
+    prepare_bracket_queries,
     send_error,
     send_outcome,
 )
@@ -72,11 +73,25 @@ class FakeUser:
     id = 123
 
 
+class FakeMessageAuthor:
+    def __init__(self, *, bot: bool) -> None:
+        self.bot = bot
+
+
+class FakeMessage:
+    def __init__(self, *, content: str, author_bot: bool = False) -> None:
+        self.author = FakeMessageAuthor(bot=author_bot)
+        self.channel = FakeChannel()
+        self.content = content
+
+
 class FakeService:
     def __init__(self, outcome: CommandOutcome | None = None) -> None:
         self.outcome = outcome
+        self.queries: list[str] = []
 
     async def card(self, query: str) -> CommandOutcome:
+        self.queries.append(query)
         if self.outcome is None:
             raise PoneglyphRateLimitError
         return self.outcome
@@ -140,6 +155,20 @@ def test_create_bot_can_enable_bracket_listener() -> None:
     bot = create_bot(command_service=None, enable_bracket_messages=True)
 
     assert "on_message" in bot.extra_events
+
+
+def test_create_bot_only_enables_message_content_intent_for_brackets() -> None:
+    default_bot = create_bot(command_service=None)
+    bracket_bot = create_bot(command_service=None, enable_bracket_messages=True)
+
+    assert default_bot.intents.message_content is False
+    assert bracket_bot.intents.message_content is True
+
+
+def test_prepare_bracket_queries_dedupes_and_caps() -> None:
+    queries = prepare_bracket_queries("[[luffy]] [[luffy]] [[zoro]] [[nami]] [[sanji]]")
+
+    assert queries == ("luffy", "zoro", "nami")
 
 
 @pytest.mark.asyncio
@@ -228,6 +257,43 @@ async def test_card_command_bot_error_sends_user_message_ephemerally() -> None:
         }
     ]
     assert interaction.channel.sends == []
+
+
+@pytest.mark.asyncio
+async def test_bracket_listener_ignores_bot_authors() -> None:
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    bot = create_bot(command_service=service, enable_bracket_messages=True)
+    listener = bot.extra_events["on_message"][0]
+    message = FakeMessage(content="[[OP01-001]]", author_bot=True)
+
+    await listener(message)
+
+    assert service.queries == []
+    assert message.channel.sends == []
+
+
+@pytest.mark.asyncio
+async def test_bracket_listener_sends_public_card_embed() -> None:
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    bot = create_bot(command_service=service, enable_bracket_messages=True)
+    listener = bot.extra_events["on_message"][0]
+    message = FakeMessage(content="[[OP01-001]]")
+
+    await listener(message)
+
+    assert service.queries == ["OP01-001"]
+    assert len(message.channel.sends) == 1
+    assert "embed" in message.channel.sends[0]
 
 
 @pytest.mark.asyncio
