@@ -1,6 +1,7 @@
 import tomllib
 from pathlib import Path
 
+import optcg_card_bot.__main__ as main_module
 from optcg_card_bot.__main__ import main
 from optcg_card_bot.config import Settings
 
@@ -37,18 +38,18 @@ def test_settings_loads_environment_aliases(monkeypatch) -> None:
     assert settings.enable_bracket_messages is True
 
 
-def test_placeholder_main_does_not_require_discord_token(monkeypatch) -> None:
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+def test_main_starts_runtime_from_settings(monkeypatch) -> None:
+    seen: dict[str, Settings] = {}
 
-    try:
-        main()
-    except SystemExit as exc:
-        message = str(exc)
-    else:
-        raise AssertionError("main() should raise SystemExit during scaffold phase")
+    async def fake_run_bot(settings: Settings) -> None:
+        seen["settings"] = settings
 
-    assert "Bot runtime is added in a later task." in message
-    assert "https://api.poneglyph.one/v1" in message
+    monkeypatch.setenv("DISCORD_TOKEN", "from-env")
+    monkeypatch.setattr(main_module, "run_bot", fake_run_bot)
+
+    main()
+
+    assert seen["settings"].discord_token == "from-env"
 
 
 def test_project_targets_python_312_only() -> None:
