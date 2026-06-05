@@ -5,6 +5,7 @@ import discord
 from optcg_card_bot.models import (
     CardDetail,
     FAQEntry,
+    PricePoint,
     best_image_url,
     best_price,
     best_variant,
@@ -104,6 +105,27 @@ def build_faq_embed(card: CardDetail, entries: tuple[FAQEntry, ...]) -> discord.
     return embed
 
 
+def build_price_embed(
+    card: CardDetail,
+    prices: tuple[PricePoint, ...],
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=_truncate(f"Prices: {card.name}", EMBED_TITLE_LIMIT),
+        url=poneglyph_card_url(card.card_number, card.language),
+        color=discord.Color.green(),
+    )
+    embed.set_footer(text=POWERED_BY)
+    for price in prices:
+        if not _add_field_if_fits(
+            embed,
+            price.label or f"Variant {price.variant_index}",
+            _price_field_value(price),
+            inline=False,
+        ):
+            break
+    return embed
+
+
 def _card_description(card: CardDetail) -> str:
     stat_parts = [card.card_type]
     if card.color:
@@ -137,6 +159,20 @@ def _faq_footer(omitted_count: int) -> str:
     if omitted_count <= 0:
         return POWERED_BY
     return f"{POWERED_BY} | {omitted_count} official FAQ entries not shown"
+
+
+def _price_field_value(price: PricePoint) -> str:
+    lines: list[str] = []
+    for label, value in (
+        ("Market", price.market_price),
+        ("Low", price.low_price),
+        ("Mid", price.mid_price),
+        ("High", price.high_price),
+    ):
+        if value:
+            lines.append(f"{label}: ${value}")
+    lines.append(f"Fetched: {price.fetched_at}")
+    return "\n".join(lines)
 
 
 def _add_field_if_fits(

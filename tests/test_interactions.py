@@ -16,7 +16,7 @@ from optcg_card_bot.interactions import (
     send_error,
     send_outcome,
 )
-from optcg_card_bot.models import CardDetailResponse
+from optcg_card_bot.models import CardDetailResponse, PricePoint
 from optcg_card_bot.search import CardChoice
 
 FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
@@ -108,6 +108,7 @@ class FakeService:
         self.raise_on_autocomplete = False
         self.search_calls: list[dict[str, object]] = []
         self.faq_queries: list[str] = []
+        self.price_calls: list[tuple[str, int]] = []
 
     async def card(self, query: str) -> CommandOutcome:
         self.queries.append(query)
@@ -147,6 +148,12 @@ class FakeService:
             raise PoneglyphRateLimitError
         return self.outcome
 
+    async def price(self, query: str, *, days: int = 30) -> CommandOutcome:
+        self.price_calls.append((query, days))
+        if self.outcome is None:
+            raise PoneglyphRateLimitError
+        return self.outcome
+
 
 class BlockingSearchService(FakeService):
     def __init__(self, outcome: CommandOutcome) -> None:
@@ -181,6 +188,20 @@ def load_card():
     return CardDetailResponse.model_validate(
         json.loads((FIXTURES / "card_op01_001.json").read_text())
     ).data
+
+
+def load_price() -> PricePoint:
+    return PricePoint(
+        variant_index=0,
+        label="Super Pre-Release",
+        sub_type="Alternate Art",
+        tcgplayer_url="https://tcgplayer.example/op01-001",
+        market_price="1.91",
+        low_price="1.00",
+        mid_price="2.25",
+        high_price="9.99",
+        fetched_at="2026-06-04T12:00:00.000Z",
+    )
 
 
 def test_choice_options_include_card_number_and_name() -> None:
@@ -285,7 +306,16 @@ def test_create_bot_registers_expected_commands() -> None:
 
     names = {command.name for command in bot.tree.get_commands()}
 
-    assert {"card", "search", "random", "faq", "help"} <= names
+    assert {"card", "search", "random", "faq", "price", "help"} <= names
+
+
+def test_create_bot_registers_price_command() -> None:
+    bot = create_bot(command_service=None)
+
+    command = bot.tree.get_command("price")
+
+    assert command is not None
+    assert {param.name for param in command.parameters} == {"card", "days"}
 
 
 @pytest.mark.asyncio
@@ -369,6 +399,23 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     assert "embed" in interaction.channel.sends[0]
     assert interaction.deleted_original_response is True
     assert interaction.edits == []
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_public_price_outcome_after_private_defer_uses_channel_send() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_PRICE,
+        card=load_card(),
+        prices=(load_price(),),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
     assert interaction.followup.sends == []
 
 
@@ -713,6 +760,95 @@ async def test_search_results_buttons_only_allow_original_user() -> None:
             "ephemeral": True,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_price_command_posts_public_price_outcome_to_channel() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_PRICE,
+            card=load_card(),
+            prices=(load_price(),),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("price")
+    assert command is not None
+
+    await command.callback(interaction, "OP01-001", 14)
+
+    assert service.price_calls == [("OP01-001", 14)]
+    assert interaction.response.defers == [{"ephemeral": True}]
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_price_command_ambiguous_uses_price_picker_action() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Select a card for price history",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("price")
+    assert command is not None
+
+    await command.callback(interaction, "zoro", 30)
+
+    assert interaction.followup.sends[0]["args"] == ("Select a card for price history",)
+    view = interaction.followup.sends[0]["view"]
+    assert isinstance(view, CardSelectView)
+    assert view.action == "price"
+
+
+@pytest.mark.asyncio
+async def test_price_picker_selection_calls_price_service() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_PRICE,
+            card=load_card(),
+            prices=(load_price(),),
+        )
+    )
+    view = CardSelectView(
+        owner_id=123,
+        source_query="zoro",
+        action="price",
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+    )
+    select = view.children[0]
+    select._values = ["OP01-001"]
+
+    await select.callback(interaction)
+
+    assert service.price_calls == [("OP01-001", 30)]
+    assert len(interaction.followup.sends) == 1
+    assert "embed" in interaction.followup.sends[0]
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ embeds.
   opens ephemeral paged results with optional Poneglyph sort controls.
 - `/random query:<optional query>` posts a random matching card publicly.
 - `/faq card:<card number or query>` posts official FAQ entries only.
+- `/price card:<card number or query> days:<optional days>` posts price history.
 - `/help` shows command help and links to Poneglyph syntax docs.
 
 ## Docker
