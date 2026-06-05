@@ -8,6 +8,7 @@ from optcg_card_bot.errors import PoneglyphRateLimitError
 from optcg_card_bot.interactions import (
     CardSelectView,
     autocomplete_card_choices,
+    SearchResultsView,
     build_choice_options,
     create_bot,
     prepare_bracket_queries,
@@ -65,13 +66,22 @@ class FakeInteractionWithoutDelete:
 class FakeResponse:
     def __init__(self) -> None:
         self.defers: list[dict[str, object]] = []
+        self.edits: list[dict[str, object]] = []
+        self.messages: list[dict[str, object]] = []
 
     async def defer(self, **kwargs: object) -> None:
         self.defers.append(kwargs)
 
+    async def edit_message(self, **kwargs: object) -> None:
+        self.edits.append(kwargs)
+
+    async def send_message(self, *args: object, **kwargs: object) -> None:
+        self.messages.append({"args": args, **kwargs})
+
 
 class FakeUser:
-    id = 123
+    def __init__(self, user_id: int = 123) -> None:
+        self.id = user_id
 
 
 class FakeMessageAuthor:
@@ -96,6 +106,7 @@ class FakeService:
         )
         self.raise_on_autocomplete = False
         self.search_calls: list[dict[str, object]] = []
+        self.faq_queries: list[str] = []
 
     async def card(self, query: str) -> CommandOutcome:
         self.queries.append(query)
@@ -108,6 +119,12 @@ class FakeService:
         if self.raise_on_autocomplete:
             raise PoneglyphRateLimitError
         return self.autocomplete_response
+
+    async def faq(self, query: str) -> CommandOutcome:
+        self.faq_queries.append(query)
+        if self.outcome is None:
+            raise PoneglyphRateLimitError
+        return self.outcome
 
     async def search(
         self,
@@ -174,6 +191,63 @@ def test_select_view_tracks_owner_and_query() -> None:
     assert view.source_query == "luffy"
     assert view.action == "card"
     assert view.timeout == 180
+
+
+def test_search_results_view_has_navigation_buttons() -> None:
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=1,
+        total=30,
+        has_more=True,
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=FakeService(),
+    )
+
+    buttons = {
+        item.label: item
+        for item in view.children
+        if item.__class__.__name__ == "SearchPageButton"
+    }
+
+    assert view.page == 1
+    assert view.total == 30
+    assert buttons["Previous"].disabled is True
+    assert buttons["Next"].disabled is False
+
+    last_page_view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=2,
+        total=30,
+        has_more=False,
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=FakeService(),
+    )
+    last_page_buttons = {
+        item.label: item
+        for item in last_page_view.children
+        if item.__class__.__name__ == "SearchPageButton"
+    }
+
+    assert last_page_buttons["Previous"].disabled is False
+    assert last_page_buttons["Next"].disabled is True
 
 
 def test_create_bot_registers_expected_commands() -> None:
@@ -307,12 +381,47 @@ async def test_card_command_posts_direct_public_outcome_to_channel() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_command_forwards_sort_and_order() -> None:
+async def test_card_and_faq_ambiguous_commands_use_card_select_view() -> None:
+    choices = (
+        CardChoice(
+            card_number="OP01-001",
+            name="Roronoa Zoro",
+            set_code="OP01",
+            card_type="Leader",
+            color=("Red",),
+        ),
+    )
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Select a card",
+            choices=choices,
+        )
+    )
+    bot = create_bot(command_service=service)
+    card_command = bot.tree.get_command("card")
+    faq_command = bot.tree.get_command("faq")
+    assert card_command is not None
+    assert faq_command is not None
+    card_interaction = FakeInteraction()
+    faq_interaction = FakeInteraction()
+
+    await card_command.callback(card_interaction, "luffy")
+    await faq_command.callback(faq_interaction, "luffy")
+
+    assert type(card_interaction.followup.sends[0]["view"]) is CardSelectView
+    assert type(faq_interaction.followup.sends[0]["view"]) is CardSelectView
+    assert service.queries == ["luffy"]
+    assert service.faq_queries == ["luffy"]
+
+
+@pytest.mark.asyncio
+async def test_search_command_sends_search_results_view() -> None:
     interaction = FakeInteraction()
     service = FakeService(
         CommandOutcome(
             kind=CommandOutcomeKind.PICKER,
-            message="Search results",
+            message="Search results | Page 1 | 30 total",
             choices=(
                 CardChoice(
                     card_number="OP01-001",
@@ -322,6 +431,10 @@ async def test_search_command_forwards_sort_and_order() -> None:
                     color=("Red",),
                 ),
             ),
+            source_query="type:leader",
+            page=1,
+            total=30,
+            has_more=True,
         )
     )
     bot = create_bot(command_service=service)
@@ -340,6 +453,11 @@ async def test_search_command_forwards_sort_and_order() -> None:
         }
     ]
     assert len(interaction.followup.sends) == 1
+    assert interaction.followup.sends[0]["args"] == (
+        "Search results | Page 1 | 30 total",
+    )
+    assert isinstance(interaction.followup.sends[0]["view"], SearchResultsView)
+    assert interaction.followup.sends[0]["ephemeral"] is True
 
 
 def test_search_command_registers_sort_and_order_choices() -> None:
@@ -367,6 +485,146 @@ def test_search_command_registers_sort_and_order_choices() -> None:
     assert [choice.value for choice in params["order"].choices] == ["asc", "desc"]
     assert params["sort"].required is False
     assert params["order"].required is False
+
+
+@pytest.mark.asyncio
+async def test_search_results_next_callback_updates_page() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 3 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="luffy",
+            page=3,
+            total=30,
+            has_more=False,
+        )
+    )
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+    )
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert service.search_calls == [
+        {
+            "query": "luffy",
+            "page": 3,
+            "sort": None,
+            "order": None,
+        }
+    ]
+    assert interaction.response.edits[0]["content"] == (
+        "Search results | Page 3 | 30 total"
+    )
+    assert isinstance(interaction.response.edits[0]["view"], SearchResultsView)
+    assert interaction.response.edits[0]["view"].page == 3
+
+
+@pytest.mark.asyncio
+async def test_search_results_previous_callback_uses_previous_page() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 1 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="luffy",
+            page=1,
+            total=30,
+            has_more=True,
+        )
+    )
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+    )
+    previous_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Previous"
+    )
+
+    await previous_button.callback(interaction)
+
+    assert service.search_calls == [
+        {
+            "query": "luffy",
+            "page": 1,
+            "sort": None,
+            "order": None,
+        }
+    ]
+    assert interaction.response.edits[0]["content"] == (
+        "Search results | Page 1 | 30 total"
+    )
+    assert interaction.response.edits[0]["view"].page == 1
+
+
+@pytest.mark.asyncio
+async def test_search_results_buttons_only_allow_original_user() -> None:
+    interaction = FakeInteraction()
+    interaction.user = FakeUser(user_id=999)
+    service = FakeService()
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=1,
+        total=30,
+        has_more=True,
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+    )
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert service.search_calls == []
+    assert interaction.response.messages == [
+        {
+            "args": ("Only the command user can use this picker.",),
+            "ephemeral": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio

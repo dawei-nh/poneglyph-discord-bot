@@ -57,6 +57,9 @@ class CommandOutcome:
     choices: tuple[CardChoice, ...] = field(default_factory=tuple)
     faq_entries: tuple[FAQEntry, ...] = field(default_factory=tuple)
     source_query: str = ""
+    page: int = 1
+    total: int = 0
+    has_more: bool = False
 
 
 SIMPLE_RANDOM_FILTER_RE = re.compile(r"^(lang|set|color|type|rarity):([^()\s]+)$")
@@ -117,9 +120,16 @@ class CommandService:
             )
         return CommandOutcome(
             kind=CommandOutcomeKind.PICKER,
-            message="Search results",
+            message=(
+                "Search results"
+                f" | Page {response.pagination.page}"
+                f" | {response.pagination.total} total"
+            ),
             choices=tuple(CardChoice.from_summary(card) for card in response.data),
             source_query=query,
+            page=response.pagination.page,
+            total=response.pagination.total,
+            has_more=response.pagination.has_more,
         )
 
     async def autocomplete_cards(self, query: str) -> tuple[str, ...]:

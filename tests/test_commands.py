@@ -22,6 +22,7 @@ class FakeClient:
         self.search_kwargs: dict[str, object] = {}
         self.get_random_kwargs: dict[str, str] = {}
         self.get_random_from_query_args: tuple[str, str] | None = None
+        self.search_cards_kwargs: dict[str, object] = {}
         self.raise_no_search_results = False
         self.autocomplete_queries: list[str] = []
         self.autocomplete_response = tuple(f"Card {index}" for index in range(30))
@@ -49,6 +50,7 @@ class FakeClient:
             "collapse": collapse,
             "lang": lang,
         }
+        self.search_cards_kwargs = self.search_kwargs
         return self.search_response
 
     async def get_random(self, **kwargs):
@@ -93,7 +95,28 @@ async def test_search_always_returns_picker() -> None:
     outcome = await service.search("luffy")
 
     assert outcome.kind is CommandOutcomeKind.PICKER
-    assert outcome.message == "Search results"
+    assert outcome.message == "Search results | Page 1 | 126 total"
+
+
+@pytest.mark.asyncio
+async def test_search_outcome_includes_pagination() -> None:
+    client = FakeClient()
+    client.search_response = client.search_response.model_copy(
+        update={
+            "pagination": client.search_response.pagination.model_copy(
+                update={"page": 3, "total": 30, "has_more": True}
+            )
+        }
+    )
+    service = CommandService(client)
+
+    outcome = await service.search("luffy", page=3)
+
+    assert client.search_cards_kwargs["page"] == 3
+    assert outcome.page == 3
+    assert outcome.total == 30
+    assert outcome.has_more is True
+    assert outcome.message == "Search results | Page 3 | 30 total"
 
 
 @pytest.mark.asyncio
