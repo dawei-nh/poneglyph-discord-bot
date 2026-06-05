@@ -15,20 +15,24 @@ from optcg_card_bot.search import CardChoice, extract_bracket_queries
 MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
 MAX_AUTOCOMPLETE_CHOICES = 25
 DISCORD_CHOICE_VALUE_LIMIT = 100
+SEARCH_SORT_VALUES = (
+    "relevance",
+    "card_number",
+    "name",
+    "cost",
+    "power",
+    "market_price",
+    "released",
+    "rarity",
+    "color",
+    "artist",
+    "number",
+    "set",
+    "usd",
+)
 SEARCH_SORT_CHOICES = [
-    app_commands.Choice(name="relevance", value="relevance"),
-    app_commands.Choice(name="card_number", value="card_number"),
-    app_commands.Choice(name="name", value="name"),
-    app_commands.Choice(name="cost", value="cost"),
-    app_commands.Choice(name="power", value="power"),
-    app_commands.Choice(name="market_price", value="market_price"),
-    app_commands.Choice(name="released", value="released"),
-    app_commands.Choice(name="rarity", value="rarity"),
-    app_commands.Choice(name="color", value="color"),
-    app_commands.Choice(name="artist", value="artist"),
-    app_commands.Choice(name="number", value="number"),
-    app_commands.Choice(name="set", value="set"),
-    app_commands.Choice(name="usd", value="usd"),
+    app_commands.Choice(name=sort_value, value=sort_value)
+    for sort_value in SEARCH_SORT_VALUES
 ]
 SEARCH_ORDER_CHOICES = [
     app_commands.Choice(name="asc", value="asc"),
