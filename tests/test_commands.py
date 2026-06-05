@@ -19,6 +19,7 @@ class FakeClient:
             json.loads((FIXTURES / "search_luffy.json").read_text())
         )
         self.random_card = self.card
+        self.search_kwargs: dict[str, object] = {}
         self.get_random_kwargs: dict[str, str] = {}
         self.get_random_from_query_args: tuple[str, str] | None = None
         self.raise_no_search_results = False
@@ -39,6 +40,15 @@ class FakeClient:
         collapse: str = "card",
         lang: str = "en",
     ):
+        self.search_kwargs = {
+            "query": query,
+            "page": page,
+            "limit": limit,
+            "sort": sort,
+            "order": order,
+            "collapse": collapse,
+            "lang": lang,
+        }
         return self.search_response
 
     async def get_random(self, **kwargs):
@@ -106,6 +116,30 @@ async def test_autocomplete_blank_query_returns_empty_tuple() -> None:
 
     assert choices == ()
     assert client.autocomplete_queries == []
+
+
+@pytest.mark.asyncio
+async def test_search_passes_sort_and_order_to_client() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    outcome = await service.search(
+        "type:leader",
+        page=2,
+        sort="market_price",
+        order="desc",
+    )
+
+    assert outcome.kind is CommandOutcomeKind.PICKER
+    assert client.search_kwargs == {
+        "query": "type:leader",
+        "page": 2,
+        "limit": 10,
+        "sort": "market_price",
+        "order": "desc",
+        "collapse": "card",
+        "lang": "en",
+    }
 
 
 @pytest.mark.asyncio

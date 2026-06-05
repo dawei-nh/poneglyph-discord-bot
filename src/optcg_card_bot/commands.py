@@ -92,11 +92,20 @@ class CommandService:
             source_query=query,
         )
 
-    async def search(self, query: str, *, page: int = 1) -> CommandOutcome:
+    async def search(
+        self,
+        query: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+        order: str | None = None,
+    ) -> CommandOutcome:
         response = await self._client.search_cards(
             query,
             page=page,
             limit=10,
+            sort=sort,
+            order=order,
             collapse="card",
             lang=self._default_language,
         )
