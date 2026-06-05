@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -7,8 +8,8 @@ from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind
 from optcg_card_bot.errors import PoneglyphRateLimitError
 from optcg_card_bot.interactions import (
     CardSelectView,
-    autocomplete_card_choices,
     SearchResultsView,
+    autocomplete_card_choices,
     build_choice_options,
     create_bot,
     prepare_bracket_queries,
@@ -142,6 +143,35 @@ class FakeService:
                 "order": order,
             }
         )
+        if self.outcome is None:
+            raise PoneglyphRateLimitError
+        return self.outcome
+
+
+class BlockingSearchService(FakeService):
+    def __init__(self, outcome: CommandOutcome) -> None:
+        super().__init__(outcome)
+        self.search_started = asyncio.Event()
+        self.allow_search = asyncio.Event()
+
+    async def search(
+        self,
+        query: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+        order: str | None = None,
+    ) -> CommandOutcome:
+        self.search_calls.append(
+            {
+                "query": query,
+                "page": page,
+                "sort": sort,
+                "order": order,
+            }
+        )
+        self.search_started.set()
+        await self.allow_search.wait()
         if self.outcome is None:
             raise PoneglyphRateLimitError
         return self.outcome
@@ -532,11 +562,69 @@ async def test_search_results_next_callback_updates_page() -> None:
             "order": None,
         }
     ]
-    assert interaction.response.edits[0]["content"] == (
-        "Search results | Page 3 | 30 total"
+    assert interaction.response.defers == [{"thinking": False}]
+    assert interaction.response.edits == []
+    assert interaction.edits[0]["content"] == "Search results | Page 3 | 30 total"
+    assert isinstance(interaction.edits[0]["view"], SearchResultsView)
+    assert interaction.edits[0]["view"].page == 3
+
+
+@pytest.mark.asyncio
+async def test_search_results_next_callback_defers_before_search_completes() -> None:
+    interaction = FakeInteraction()
+    service = BlockingSearchService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 3 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="luffy",
+            page=3,
+            total=30,
+            has_more=False,
+        )
     )
-    assert isinstance(interaction.response.edits[0]["view"], SearchResultsView)
-    assert interaction.response.edits[0]["view"].page == 3
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+    )
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    task = asyncio.create_task(next_button.callback(interaction))
+    await service.search_started.wait()
+
+    try:
+        assert interaction.response.defers == [{"thinking": False}]
+    finally:
+        service.allow_search.set()
+        await task
+
+    assert service.search_calls == [
+        {
+            "query": "luffy",
+            "page": 3,
+            "sort": None,
+            "order": None,
+        }
+    ]
+    assert interaction.response.edits == []
+    assert interaction.edits[0]["content"] == "Search results | Page 3 | 30 total"
+    assert isinstance(interaction.edits[0]["view"], SearchResultsView)
+    assert interaction.edits[0]["view"].page == 3
 
 
 @pytest.mark.asyncio
@@ -584,10 +672,10 @@ async def test_search_results_previous_callback_uses_previous_page() -> None:
             "order": None,
         }
     ]
-    assert interaction.response.edits[0]["content"] == (
-        "Search results | Page 1 | 30 total"
-    )
-    assert interaction.response.edits[0]["view"].page == 1
+    assert interaction.response.defers == [{"thinking": False}]
+    assert interaction.response.edits == []
+    assert interaction.edits[0]["content"] == "Search results | Page 1 | 30 total"
+    assert interaction.edits[0]["view"].page == 1
 
 
 @pytest.mark.asyncio

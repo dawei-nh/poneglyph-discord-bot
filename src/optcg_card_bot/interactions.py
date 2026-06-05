@@ -189,20 +189,22 @@ class SearchResultsView(CardSelectView):
             )
             return
 
+        await interaction.response.defer(thinking=False)
+
         try:
             outcome = await self.service.search(
                 self.source_query,
                 page=max(1, self.page + page_delta),
             )
         except BotError as error:
-            await interaction.response.send_message(error.user_message, ephemeral=True)
+            await interaction.followup.send(error.user_message, ephemeral=True)
             return
 
         if outcome.kind is not CommandOutcomeKind.PICKER:
-            await interaction.response.edit_message(content=outcome.message, view=None)
+            await interaction.edit_original_response(content=outcome.message, view=None)
             return
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=outcome.message,
             view=SearchResultsView(
                 owner_id=self.owner_id,
