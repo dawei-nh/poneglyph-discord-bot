@@ -1,0 +1,18 @@
+services:
+  bot:
+    image: poneglyph-discord-bot:local
+    environment:
+      DISCORD_TOKEN_FILE: /run/secrets/discord_token
+      PONEGLYPH_BASE_URL: https://api.poneglyph.one
+      PONEGLYPH_API_PREFIX: /v1
+      OPTCG_DEFAULT_LANGUAGE: en
+      OPTCG_REQUEST_TIMEOUT_SECONDS: "10"
+      OPTCG_REQUEST_MIN_INTERVAL_SECONDS: "0.25"
+      OPTCG_ENABLE_BRACKET_MESSAGES: "false"
+    secrets:
+      - discord_token
+    restart: unless-stopped
+
+secrets:
+  discord_token:
+    file: ./secrets/discord_token.txt

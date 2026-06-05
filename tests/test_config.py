@@ -1,6 +1,9 @@
 import tomllib
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 import optcg_card_bot.__main__ as main_module
 from optcg_card_bot.__main__ import main
 from optcg_card_bot.config import Settings
@@ -60,3 +63,46 @@ def test_project_targets_python_312_only() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())
 
     assert pyproject["project"]["requires-python"] == ">=3.12,<3.13"
+
+
+def test_settings_loads_discord_token_file(tmp_path) -> None:
+    token_file = tmp_path / "discord_token"
+    token_file.write_text("from-file\n")
+
+    settings = Settings(discord_token_file=token_file)
+
+    assert settings.discord_token == "from-file"
+
+
+def test_settings_token_file_takes_precedence(tmp_path) -> None:
+    token_file = tmp_path / "discord_token"
+    token_file.write_text("from-file\n")
+
+    settings = Settings(discord_token="from-env", discord_token_file=token_file)
+
+    assert settings.discord_token == "from-file"
+
+
+def test_settings_ignores_blank_discord_token_file(monkeypatch) -> None:
+    monkeypatch.setenv("DISCORD_TOKEN", "from-env")
+    monkeypatch.setenv("DISCORD_TOKEN_FILE", "")
+
+    settings = Settings()
+
+    assert settings.discord_token == "from-env"
+    assert settings.discord_token_file is None
+
+
+def test_settings_rejects_missing_token_file(tmp_path) -> None:
+    missing_file = tmp_path / "missing"
+
+    with pytest.raises(ValidationError, match="DISCORD_TOKEN_FILE could not be read"):
+        Settings(discord_token_file=missing_file)
+
+
+def test_settings_rejects_empty_token_file(tmp_path) -> None:
+    token_file = tmp_path / "discord_token"
+    token_file.write_text("\n")
+
+    with pytest.raises(ValidationError, match="DISCORD_TOKEN_FILE is empty"):
+        Settings(discord_token_file=token_file)
