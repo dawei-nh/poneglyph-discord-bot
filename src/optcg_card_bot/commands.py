@@ -39,6 +39,8 @@ class CommandClient(Protocol):
         self, query: str, *, lang: str = "en"
     ) -> CardDetail: ...
 
+    async def autocomplete_cards(self, query: str) -> tuple[str, ...]: ...
+
 
 class CommandOutcomeKind(StrEnum):
     PUBLIC_CARD = "public_card"
@@ -110,6 +112,12 @@ class CommandService:
             choices=tuple(CardChoice.from_summary(card) for card in response.data),
             source_query=query,
         )
+
+    async def autocomplete_cards(self, query: str) -> tuple[str, ...]:
+        stripped = query.strip()
+        if not stripped:
+            return ()
+        return tuple((await self._client.autocomplete_cards(stripped))[:25])
 
     async def random(self, query: str) -> CommandOutcome:
         stripped = query.strip()

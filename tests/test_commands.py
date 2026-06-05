@@ -22,6 +22,8 @@ class FakeClient:
         self.get_random_kwargs: dict[str, str] = {}
         self.get_random_from_query_args: tuple[str, str] | None = None
         self.raise_no_search_results = False
+        self.autocomplete_queries: list[str] = []
+        self.autocomplete_response = tuple(f"Card {index}" for index in range(30))
 
     async def get_card(self, card_number: str, *, lang: str = "en"):
         return self.card
@@ -48,6 +50,10 @@ class FakeClient:
         if self.raise_no_search_results:
             raise NoSearchResultsError
         return self.random_card
+
+    async def autocomplete_cards(self, query: str):
+        self.autocomplete_queries.append(query)
+        return self.autocomplete_response
 
 
 @pytest.mark.asyncio
@@ -78,6 +84,28 @@ async def test_search_always_returns_picker() -> None:
 
     assert outcome.kind is CommandOutcomeKind.PICKER
     assert outcome.message == "Search results"
+
+
+@pytest.mark.asyncio
+async def test_autocomplete_returns_trimmed_choices() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    choices = await service.autocomplete_cards("  luffy  ")
+
+    assert client.autocomplete_queries == ["luffy"]
+    assert choices == tuple(f"Card {index}" for index in range(25))
+
+
+@pytest.mark.asyncio
+async def test_autocomplete_blank_query_returns_empty_tuple() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    choices = await service.autocomplete_cards("   ")
+
+    assert choices == ()
+    assert client.autocomplete_queries == []
 
 
 @pytest.mark.asyncio

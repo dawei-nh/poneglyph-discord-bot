@@ -19,6 +19,7 @@ from optcg_card_bot.errors import (
     PoneglyphValidationError,
 )
 from optcg_card_bot.models import (
+    AutocompleteResponse,
     CardDetail,
     CardDetailResponse,
     RandomCardResponse,
@@ -99,6 +100,17 @@ class PoneglyphClient:
         )
         try:
             return CardDetailResponse.model_validate(payload).data
+        except ValidationError as exc:
+            raise PoneglyphServerError from exc
+
+    async def autocomplete_cards(self, query: str) -> tuple[str, ...]:
+        payload = await self._request_json(
+            "GET",
+            "/cards/autocomplete",
+            params={"q": query},
+        )
+        try:
+            return tuple(AutocompleteResponse.model_validate(payload).data)
         except ValidationError as exc:
             raise PoneglyphServerError from exc
 

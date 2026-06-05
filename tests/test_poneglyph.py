@@ -140,6 +140,40 @@ async def test_search_url_construction() -> None:
 
 
 @pytest.mark.asyncio
+async def test_autocomplete_url_construction() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": ["Monkey.D.Luffy", "Roronoa Zoro"]})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.example.test",
+    ) as http:
+        client = PoneglyphClient(http_client=http, api_prefix="/v1", min_interval=0)
+        response = await client.autocomplete_cards("luffy")
+
+    assert response == ("Monkey.D.Luffy", "Roronoa Zoro")
+    assert requests[0].url.path == "/v1/cards/autocomplete"
+    assert requests[0].url.params["q"] == "luffy"
+
+
+@pytest.mark.asyncio
+async def test_malformed_autocomplete_response_maps_to_server_error() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"data": [123]})
+        ),
+        base_url="https://api.example.test",
+    ) as http:
+        client = PoneglyphClient(http_client=http, api_prefix="/v1", min_interval=0)
+
+        with pytest.raises(PoneglyphServerError):
+            await client.autocomplete_cards("luffy")
+
+
+@pytest.mark.asyncio
 async def test_search_omits_falsey_optional_params() -> None:
     requests: list[httpx.Request] = []
     payload = json.loads((FIXTURES / "search_luffy.json").read_text())
