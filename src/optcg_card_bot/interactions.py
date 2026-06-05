@@ -158,6 +158,17 @@ def build_autocomplete_choices(
     ]
 
 
+async def autocomplete_card_choices(
+    service: CommandService,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    try:
+        choices = await service.autocomplete_cards(current)
+    except BotError:
+        return []
+    return build_autocomplete_choices(choices)
+
+
 class SyncingBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.tree.sync()
@@ -178,11 +189,7 @@ def create_bot(
         current: str,
     ) -> list[app_commands.Choice[str]]:
         service = _require_service(command_service)
-        try:
-            choices = await service.autocomplete_cards(current)
-        except BotError:
-            return []
-        return build_autocomplete_choices(choices)
+        return await autocomplete_card_choices(service, current)
 
     @bot.tree.command(name="card", description="Search and post a Poneglyph card")
     @app_commands.describe(query="Poneglyph query or card number")
