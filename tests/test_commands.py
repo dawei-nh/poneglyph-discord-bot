@@ -281,4 +281,5 @@ def test_help_is_ephemeral_message() -> None:
 
     assert outcome.kind is CommandOutcomeKind.EPHEMERAL_MESSAGE
     assert "/card" in outcome.message
+    assert "/price" in outcome.message
     assert "https://poneglyph.one/syntax" in outcome.message

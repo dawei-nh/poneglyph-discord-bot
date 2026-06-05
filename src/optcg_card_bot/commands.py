@@ -242,6 +242,7 @@ class CommandService:
                 "`/search query:<query>` opens private search results.\n"
                 "`/random query:<optional query>` posts a random card.\n"
                 "`/faq card:<card>` posts official FAQ entries only.\n"
+                "`/price card:<card> days:<optional days>` posts price history.\n"
                 "Poneglyph syntax: https://poneglyph.one/syntax"
             ),
         )
