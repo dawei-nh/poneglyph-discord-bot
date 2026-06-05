@@ -85,7 +85,7 @@ class CardSelect(discord.ui.Select[discord.ui.View]):
             if view.action == "faq":
                 outcome = await view.service.faq(card_number)
             elif view.action == "price":
-                outcome = await view.service.price(card_number)
+                outcome = await view.service.price(card_number, days=view.price_days)
             else:
                 outcome = await view.service.card(card_number)
         except BotError as error:
@@ -103,12 +103,14 @@ class CardSelectView(discord.ui.View):
         action: str,
         choices: tuple[CardChoice, ...],
         service: CommandService | None = None,
+        price_days: int = 30,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
         self.source_query = source_query
         self.action = action
         self.service = service
+        self.price_days = price_days
         self.add_item(CardSelect(choices))
 
 
@@ -454,6 +456,7 @@ def create_bot(
                     action="price",
                     choices=outcome.choices,
                     service=service,
+                    price_days=days,
                 ),
                 ephemeral=True,
             )

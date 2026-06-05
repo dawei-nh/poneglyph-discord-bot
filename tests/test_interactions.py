@@ -808,16 +808,17 @@ async def test_price_command_ambiguous_uses_price_picker_action() -> None:
     command = bot.tree.get_command("price")
     assert command is not None
 
-    await command.callback(interaction, "zoro", 30)
+    await command.callback(interaction, "zoro", 7)
 
     assert interaction.followup.sends[0]["args"] == ("Select a card for price history",)
     view = interaction.followup.sends[0]["view"]
     assert isinstance(view, CardSelectView)
     assert view.action == "price"
+    assert view.price_days == 7
 
 
 @pytest.mark.asyncio
-async def test_price_picker_selection_calls_price_service() -> None:
+async def test_price_picker_selection_preserves_requested_days() -> None:
     interaction = FakeInteraction()
     service = FakeService(
         CommandOutcome(
@@ -840,13 +841,14 @@ async def test_price_picker_selection_calls_price_service() -> None:
             ),
         ),
         service=service,
+        price_days=7,
     )
     select = view.children[0]
     select._values = ["OP01-001"]
 
     await select.callback(interaction)
 
-    assert service.price_calls == [("OP01-001", 30)]
+    assert service.price_calls == [("OP01-001", 7)]
     assert len(interaction.followup.sends) == 1
     assert "embed" in interaction.followup.sends[0]
 
