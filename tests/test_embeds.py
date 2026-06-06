@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from optcg_card_bot.embeds import build_card_embed, build_faq_embed
-from optcg_card_bot.models import CardDetailResponse, FAQEntry
+from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
+from optcg_card_bot.models import CardDetailResponse, FAQEntry, PricePoint
 
 FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
 EMBED_TOTAL_TEXT_LIMIT = 6000
@@ -55,6 +55,48 @@ def test_faq_embed_uses_official_faq_entries() -> None:
 
     assert embed.title == "Official FAQ: Roronoa Zoro"
     assert len(embed.fields) == len(card.official_faq)
+
+
+def test_price_embed_lists_variant_prices() -> None:
+    card = load_card()
+    prices = (
+        PricePoint(
+            variant_index=0,
+            label="Super Pre-Release",
+            sub_type="Alternate Art",
+            tcgplayer_url="https://tcgplayer.example/op01-001",
+            market_price="1.91",
+            low_price="1.00",
+            mid_price="2.25",
+            high_price="9.99",
+            fetched_at="2026-06-04T12:00:00.000Z",
+        ),
+        PricePoint(
+            variant_index=1,
+            label=None,
+            sub_type=None,
+            tcgplayer_url=None,
+            market_price=None,
+            low_price="490.00",
+            mid_price=None,
+            high_price=None,
+            fetched_at="2026-06-04T12:00:00.000Z",
+        ),
+    )
+
+    embed = build_price_embed(card, prices)
+
+    assert embed.title == "Prices: Roronoa Zoro"
+    assert embed.url == "https://poneglyph.one/cards/OP01-001?lang=en"
+    assert embed.footer.text == "Powered by Poneglyph"
+    assert embed.fields[0].name == "Super Pre-Release"
+    assert "Market: $1.91" in embed.fields[0].value
+    assert "Low: $1.00" in embed.fields[0].value
+    assert "Mid: $2.25" in embed.fields[0].value
+    assert "High: $9.99" in embed.fields[0].value
+    assert "Fetched: 2026-06-04T12:00:00.000Z" in embed.fields[0].value
+    assert embed.fields[1].name == "Variant 1"
+    assert embed.fields[1].value == "Low: $490.00\nFetched: 2026-06-04T12:00:00.000Z"
 
 
 def test_card_embed_truncates_long_text_within_discord_limits() -> None:

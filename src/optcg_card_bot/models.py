@@ -46,6 +46,18 @@ class Market(StrictModel):
     high_price: str | None
 
 
+class PricePoint(StrictModel):
+    variant_index: int
+    label: str | None
+    sub_type: str | None
+    tcgplayer_url: str | None
+    market_price: str | None
+    low_price: str | None
+    mid_price: str | None
+    high_price: str | None
+    fetched_at: str
+
+
 class CardVariant(StrictModel):
     index: int
     name: str | None
@@ -138,6 +150,10 @@ class RandomCardSummaryResponse(StrictModel):
 
 class AutocompleteResponse(StrictModel):
     data: list[str]
+
+
+class PriceHistoryResponse(StrictModel):
+    data: list[PricePoint]
 
 
 class SearchParams(StrictModel):

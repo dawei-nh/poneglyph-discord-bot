@@ -5,7 +5,7 @@ import pytest
 
 from optcg_card_bot.commands import CommandOutcomeKind, CommandService
 from optcg_card_bot.errors import NoSearchResultsError
-from optcg_card_bot.models import CardDetailResponse, SearchResponse
+from optcg_card_bot.models import CardDetailResponse, PricePoint, SearchResponse
 
 FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
 
@@ -20,9 +20,23 @@ class FakeClient:
         )
         self.random_card = self.card
         self.search_kwargs: dict[str, object] = {}
+        self.search_cards_kwargs: dict[str, object] = {}
+        self.prices = (
+            PricePoint(
+                variant_index=0,
+                label="Super Pre-Release",
+                sub_type="Alternate Art",
+                tcgplayer_url="https://tcgplayer.example/op01-001",
+                market_price="1.91",
+                low_price="1.00",
+                mid_price="2.25",
+                high_price="9.99",
+                fetched_at="2026-06-04T12:00:00.000Z",
+            ),
+        )
         self.get_random_kwargs: dict[str, str] = {}
         self.get_random_from_query_args: tuple[str, str] | None = None
-        self.search_cards_kwargs: dict[str, object] = {}
+        self.get_prices_args: tuple[str, int] | None = None
         self.raise_no_search_results = False
         self.autocomplete_queries: list[str] = []
         self.autocomplete_response = tuple(f"Card {index}" for index in range(30))
@@ -66,6 +80,10 @@ class FakeClient:
     async def autocomplete_cards(self, query: str):
         self.autocomplete_queries.append(query)
         return self.autocomplete_response
+
+    async def get_prices(self, card_number: str, *, days: int = 30):
+        self.get_prices_args = (card_number, days)
+        return self.prices
 
 
 @pytest.mark.asyncio
@@ -222,9 +240,46 @@ async def test_faq_uses_official_faq_only() -> None:
     assert outcome.faq_entries
 
 
+@pytest.mark.asyncio
+async def test_price_direct_number_returns_public_price() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    outcome = await service.price("OP01-001", days=7)
+
+    assert outcome.kind is CommandOutcomeKind.PUBLIC_PRICE
+    assert outcome.card is not None
+    assert outcome.prices == client.prices
+    assert client.get_prices_args == ("OP01-001", 7)
+
+
+@pytest.mark.asyncio
+async def test_price_ambiguous_returns_price_picker() -> None:
+    service = CommandService(FakeClient())
+
+    outcome = await service.price("luffy")
+
+    assert outcome.kind is CommandOutcomeKind.PICKER
+    assert outcome.message == "Select a card for price history"
+    assert len(outcome.choices) == 2
+
+
+@pytest.mark.asyncio
+async def test_price_no_rows_returns_ephemeral_message() -> None:
+    client = FakeClient()
+    client.prices = ()
+    service = CommandService(client)
+
+    outcome = await service.price("OP01-001")
+
+    assert outcome.kind is CommandOutcomeKind.EPHEMERAL_MESSAGE
+    assert outcome.message == "No price history is available for OP01-001."
+
+
 def test_help_is_ephemeral_message() -> None:
     outcome = CommandService(FakeClient()).help()
 
     assert outcome.kind is CommandOutcomeKind.EPHEMERAL_MESSAGE
     assert "/card" in outcome.message
+    assert "/price" in outcome.message
     assert "https://poneglyph.one/syntax" in outcome.message

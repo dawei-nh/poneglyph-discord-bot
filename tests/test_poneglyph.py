@@ -31,6 +31,7 @@ def test_public_methods_use_required_keyword_only_signatures() -> None:
     init_signature = inspect.signature(PoneglyphClient)
     search_signature = inspect.signature(PoneglyphClient.search_cards)
     card_signature = inspect.signature(PoneglyphClient.get_card)
+    prices_signature = inspect.signature(PoneglyphClient.get_prices)
     random_signature = inspect.signature(PoneglyphClient.get_random)
     random_query_signature = inspect.signature(PoneglyphClient.get_random_from_query)
 
@@ -62,6 +63,13 @@ def test_public_methods_use_required_keyword_only_signatures() -> None:
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
     )
     assert_param(card_signature, "lang", inspect.Parameter.KEYWORD_ONLY, "en")
+
+    assert_param(
+        prices_signature,
+        "card_number",
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    )
+    assert_param(prices_signature, "days", inspect.Parameter.KEYWORD_ONLY, 30)
 
     for name, default in {
         "lang": "en",
@@ -204,6 +212,54 @@ async def test_malformed_search_response_maps_to_server_error() -> None:
 
         with pytest.raises(PoneglyphServerError):
             await client.search_cards("luffy")
+
+
+@pytest.mark.asyncio
+async def test_get_prices_url_construction() -> None:
+    requests: list[httpx.Request] = []
+    payload = {
+        "data": [
+            {
+                "variant_index": 0,
+                "label": "Super Pre-Release",
+                "sub_type": "Alternate Art",
+                "tcgplayer_url": "https://tcgplayer.example/op01-001",
+                "market_price": "1.91",
+                "low_price": "1.00",
+                "mid_price": "2.25",
+                "high_price": "9.99",
+                "fetched_at": "2026-06-04T12:00:00.000Z",
+            }
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.example.test",
+    ) as http:
+        client = PoneglyphClient(http_client=http, api_prefix="/v1", min_interval=0)
+        prices = await client.get_prices("op01-001", days=14)
+
+    assert prices[0].variant_index == 0
+    assert prices[0].market_price == "1.91"
+    assert requests[0].url.path == "/v1/prices/OP01-001"
+    assert requests[0].url.params["days"] == "14"
+
+
+@pytest.mark.asyncio
+async def test_malformed_prices_response_maps_to_server_error() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})),
+        base_url="https://api.example.test",
+    ) as http:
+        client = PoneglyphClient(http_client=http, api_prefix="/v1", min_interval=0)
+
+        with pytest.raises(PoneglyphServerError):
+            await client.get_prices("OP01-001")
 
 
 @pytest.mark.asyncio

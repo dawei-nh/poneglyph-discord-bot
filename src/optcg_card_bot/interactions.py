@@ -8,7 +8,7 @@ from discord.abc import Messageable
 from discord.ext import commands
 
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind, CommandService
-from optcg_card_bot.embeds import build_card_embed, build_faq_embed
+from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
 from optcg_card_bot.errors import BotError
 from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
@@ -81,18 +81,16 @@ class CardSelect(discord.ui.Select[discord.ui.View]):
             return
 
         card_number = self.values[0]
-        if view.action == "faq":
-            try:
+        try:
+            if view.action == "faq":
                 outcome = await view.service.faq(card_number)
-            except BotError as error:
-                await send_error(interaction, error)
-                return
-        else:
-            try:
+            elif view.action == "price":
+                outcome = await view.service.price(card_number, days=view.price_days)
+            else:
                 outcome = await view.service.card(card_number)
-            except BotError as error:
-                await send_error(interaction, error)
-                return
+        except BotError as error:
+            await send_error(interaction, error)
+            return
         await send_outcome(interaction, outcome)
 
 
@@ -105,12 +103,14 @@ class CardSelectView(discord.ui.View):
         action: str,
         choices: tuple[CardChoice, ...],
         service: CommandService | None = None,
+        price_days: int = 30,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
         self.source_query = source_query
         self.action = action
         self.service = service
+        self.price_days = price_days
         self.add_item(CardSelect(choices))
 
 
@@ -235,6 +235,15 @@ async def send_outcome(
         return
     if outcome.kind is CommandOutcomeKind.PUBLIC_FAQ and outcome.card is not None:
         embed = build_faq_embed(outcome.card, outcome.faq_entries)
+        if public_channel and hasattr(interaction.channel, "send"):
+            channel = cast("Messageable", interaction.channel)
+            await channel.send(embed=embed)
+            await _clear_original_response(interaction)
+        else:
+            await interaction.followup.send(embed=embed, ephemeral=False)
+        return
+    if outcome.kind is CommandOutcomeKind.PUBLIC_PRICE and outcome.card is not None:
+        embed = build_price_embed(outcome.card, outcome.prices)
         if public_channel and hasattr(interaction.channel, "send"):
             channel = cast("Messageable", interaction.channel)
             await channel.send(embed=embed)
@@ -421,12 +430,45 @@ def create_bot(
             return
         await send_outcome(interaction, outcome, public_channel=True)
 
+    @bot.tree.command(name="price", description="Post Poneglyph price history")
+    @app_commands.describe(
+        card="Card number or Poneglyph query",
+        days="Days of price history",
+    )
+    async def price(
+        interaction: discord.Interaction,
+        card: str,
+        days: int = 30,
+    ) -> None:
+        service = _require_service(command_service)
+        await interaction.response.defer(ephemeral=True)
+        try:
+            outcome = await service.price(card, days=days)
+        except BotError as error:
+            await send_error(interaction, error)
+            return
+        if outcome.kind is CommandOutcomeKind.PICKER:
+            await interaction.followup.send(
+                outcome.message,
+                view=CardSelectView(
+                    owner_id=interaction.user.id,
+                    source_query=card,
+                    action="price",
+                    choices=outcome.choices,
+                    service=service,
+                    price_days=days,
+                ),
+                ephemeral=True,
+            )
+            return
+        await send_outcome(interaction, outcome, public_channel=True)
+
     @bot.tree.command(name="help", description="Show bot help")
     async def help_command(interaction: discord.Interaction) -> None:
         service = _require_service(command_service)
         await interaction.response.send_message(service.help().message, ephemeral=True)
 
-    _registered_commands = (card, search, random_card, faq, help_command)
+    _registered_commands = (card, search, random_card, faq, price, help_command)
     if enable_bracket_messages:
 
         @bot.listen("on_message")

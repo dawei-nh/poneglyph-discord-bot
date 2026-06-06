@@ -22,6 +22,8 @@ from optcg_card_bot.models import (
     AutocompleteResponse,
     CardDetail,
     CardDetailResponse,
+    PriceHistoryResponse,
+    PricePoint,
     RandomCardResponse,
     RandomCardSummaryResponse,
     SearchResponse,
@@ -112,6 +114,23 @@ class PoneglyphClient:
         )
         try:
             return tuple(AutocompleteResponse.model_validate(payload).data)
+        except ValidationError as exc:
+            raise PoneglyphServerError from exc
+
+    async def get_prices(
+        self,
+        card_number: str,
+        *,
+        days: int = 30,
+    ) -> tuple[PricePoint, ...]:
+        encoded_card_number = quote(card_number.upper(), safe="")
+        payload = await self._request_json(
+            "GET",
+            f"/prices/{encoded_card_number}",
+            params={"days": days},
+        )
+        try:
+            return tuple(PriceHistoryResponse.model_validate(payload).data)
         except ValidationError as exc:
             raise PoneglyphServerError from exc
 

@@ -45,3 +45,9 @@ def test_readme_links_to_docker_docs() -> None:
     readme = (ROOT / "README.md").read_text()
 
     assert "[Docker Deployment](docs/deployment/docker.md)" in readme
+
+
+def test_readme_lists_price_command() -> None:
+    readme = (ROOT / "README.md").read_text()
+
+    assert "/price card:<card number or query> days:<optional days>" in readme

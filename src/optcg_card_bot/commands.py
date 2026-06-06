@@ -6,12 +6,19 @@ from enum import StrEnum
 from typing import Protocol
 
 from optcg_card_bot.errors import NoSearchResultsError
-from optcg_card_bot.models import CardDetail, FAQEntry, SearchResponse
+from optcg_card_bot.models import CardDetail, FAQEntry, PricePoint, SearchResponse
 from optcg_card_bot.search import CardChoice, ResolutionKind, resolve_card_query
 
 
 class CommandClient(Protocol):
     async def get_card(self, card_number: str, *, lang: str = "en") -> CardDetail: ...
+
+    async def get_prices(
+        self,
+        card_number: str,
+        *,
+        days: int = 30,
+    ) -> tuple[PricePoint, ...]: ...
 
     async def search_cards(
         self,
@@ -45,6 +52,7 @@ class CommandClient(Protocol):
 class CommandOutcomeKind(StrEnum):
     PUBLIC_CARD = "public_card"
     PUBLIC_FAQ = "public_faq"
+    PUBLIC_PRICE = "public_price"
     PICKER = "picker"
     EPHEMERAL_MESSAGE = "ephemeral_message"
 
@@ -56,6 +64,7 @@ class CommandOutcome:
     card: CardDetail | None = None
     choices: tuple[CardChoice, ...] = field(default_factory=tuple)
     faq_entries: tuple[FAQEntry, ...] = field(default_factory=tuple)
+    prices: tuple[PricePoint, ...] = field(default_factory=tuple)
     source_query: str = ""
     page: int = 1
     total: int = 0
@@ -195,6 +204,35 @@ class CommandService:
             source_query=query,
         )
 
+    async def price(self, query: str, *, days: int = 30) -> CommandOutcome:
+        card_outcome = await self.card(query)
+        if card_outcome.kind is CommandOutcomeKind.PICKER:
+            return CommandOutcome(
+                kind=CommandOutcomeKind.PICKER,
+                message="Select a card for price history",
+                choices=card_outcome.choices,
+                source_query=query,
+            )
+        if card_outcome.card is None:
+            return card_outcome
+
+        prices = await self._client.get_prices(card_outcome.card.card_number, days=days)
+        if not prices:
+            return CommandOutcome(
+                kind=CommandOutcomeKind.EPHEMERAL_MESSAGE,
+                message=(
+                    f"No price history is available for "
+                    f"{card_outcome.card.card_number}."
+                ),
+                source_query=query,
+            )
+        return CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_PRICE,
+            card=card_outcome.card,
+            prices=prices,
+            source_query=query,
+        )
+
     def help(self) -> CommandOutcome:
         return CommandOutcome(
             kind=CommandOutcomeKind.EPHEMERAL_MESSAGE,
@@ -204,6 +242,7 @@ class CommandService:
                 "`/search query:<query>` opens private search results.\n"
                 "`/random query:<optional query>` posts a random card.\n"
                 "`/faq card:<card>` posts official FAQ entries only.\n"
+                "`/price card:<card> days:<optional days>` posts price history.\n"
                 "Poneglyph syntax: https://poneglyph.one/syntax"
             ),
         )
