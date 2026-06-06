@@ -448,7 +448,7 @@ def create_bot(
     async def price(
         interaction: discord.Interaction,
         card: str,
-        days: int = 30,
+        days: app_commands.Range[int, 1, 365] = 30,
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)

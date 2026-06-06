@@ -318,6 +318,18 @@ def test_create_bot_registers_price_command() -> None:
     assert {param.name for param in command.parameters} == {"card", "days"}
 
 
+def test_price_command_limits_days_to_api_range() -> None:
+    bot = create_bot(command_service=None)
+    command = bot.tree.get_command("price")
+    assert command is not None
+
+    days = command.get_parameter("days")
+
+    assert days is not None
+    assert days.min_value == 1
+    assert days.max_value == 365
+
+
 @pytest.mark.asyncio
 async def test_autocomplete_card_choices_returns_capped_trimmed_choices() -> None:
     service = FakeService()

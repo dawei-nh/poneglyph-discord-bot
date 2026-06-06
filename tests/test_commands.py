@@ -253,6 +253,19 @@ async def test_price_direct_number_returns_public_price() -> None:
     assert client.get_prices_args == ("OP01-001", 7)
 
 
+@pytest.mark.parametrize("days", [0, 366])
+@pytest.mark.asyncio
+async def test_price_rejects_days_outside_api_range(days: int) -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    outcome = await service.price("OP01-001", days=days)
+
+    assert outcome.kind is CommandOutcomeKind.EPHEMERAL_MESSAGE
+    assert outcome.message == "Price history days must be between 1 and 365."
+    assert client.get_prices_args is None
+
+
 @pytest.mark.asyncio
 async def test_price_ambiguous_returns_price_picker() -> None:
     service = CommandService(FakeClient())
