@@ -368,13 +368,14 @@ def test_card_oriented_commands_have_poneglyph_autocomplete() -> None:
         "search": "query",
         "random": "query",
         "faq": "card",
+        "price": "card",
     }
     for command_name, parameter_name in expected_params.items():
         command = bot.tree.get_command(command_name)
         assert command is not None
         parameter = command.get_parameter(parameter_name)
         assert parameter is not None
-        assert parameter.autocomplete is not None
+        assert parameter.autocomplete is True
 
 
 def test_create_bot_can_enable_bracket_listener() -> None:
