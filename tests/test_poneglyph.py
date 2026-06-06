@@ -236,6 +236,33 @@ async def test_429_maps_to_rate_limit_after_retries() -> None:
 
 
 @pytest.mark.asyncio
+async def test_random_summary_response_fetches_card_detail() -> None:
+    search_payload = json.loads((FIXTURES / "search_op01_001.json").read_text())
+    random_payload = {"data": search_payload["data"][0]}
+    card_payload = json.loads((FIXTURES / "card_op01_001.json").read_text())
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/v1/random":
+            return httpx.Response(200, json=random_payload)
+        return httpx.Response(200, json=card_payload)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.example.test",
+    ) as http:
+        client = PoneglyphClient(http_client=http, api_prefix="/v1", min_interval=0)
+        result = await client.get_random()
+
+    assert result.card_number == "OP01-001"
+    assert [request.url.path for request in requests] == [
+        "/v1/random",
+        "/v1/cards/OP01-001",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_random_query_sampling_uses_search_total() -> None:
     search_payload = json.loads((FIXTURES / "search_op01_001.json").read_text())
     card_payload = json.loads((FIXTURES / "card_op01_001.json").read_text())

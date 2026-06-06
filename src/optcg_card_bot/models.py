@@ -132,6 +132,10 @@ class RandomCardResponse(StrictModel):
     data: CardDetail
 
 
+class RandomCardSummaryResponse(StrictModel):
+    data: CardSummary
+
+
 class AutocompleteResponse(StrictModel):
     data: list[str]
 
