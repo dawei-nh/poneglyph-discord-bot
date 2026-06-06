@@ -19,6 +19,11 @@ embeds.
 See [Docker Deployment](docs/deployment/docker.md) for local image builds,
 Compose secrets, and Docker Hub publish behavior.
 
+## Architecture
+
+See [Architecture Reference](docs/architecture.md) for command behavior,
+Poneglyph API guardrails, module boundaries, and testing expectations.
+
 ## Phase 2 Message Lookup
 
 Set `OPTCG_ENABLE_BRACKET_MESSAGES=true` to enable `[[card-name]]` message
