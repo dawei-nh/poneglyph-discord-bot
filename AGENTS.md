@@ -5,11 +5,11 @@ apply to every agent working in this repo.
 
 ## Source Of Truth
 
-- Follow `docs/superpowers/plans/2026-06-04-slash-first-poneglyph-discord-bot.md`.
-- Use the design spec at
-  `docs/superpowers/specs/2026-06-04-slash-first-poneglyph-discord-bot-design.md`
-  for product intent and edge-case decisions.
-- Work one plan task at a time. Do not skip ahead, combine unrelated tasks, or
+- Use `docs/architecture.md` for product intent, architecture boundaries,
+  command behavior, API guardrails, and edge-case decisions.
+- Use `docs/notes/2026-06-06-post-mvp-follow-ups.md` for remaining known
+  follow-up work.
+- Work one scoped task at a time. Do not skip ahead, combine unrelated tasks, or
   broaden scope without explicit user approval.
 
 ## Implementation Discipline
@@ -18,9 +18,10 @@ apply to every agent working in this repo.
   3.12, `uv`, Node.js for Pyright, and CA certificates for HTTPS tooling.
 - Use TDD for implementation tasks: write the failing test, run it, implement
   the smallest change, then rerun the task verification commands.
-- Commit after each completed task using the commit message from the plan.
-- Before reporting a task complete, run the verification commands listed for
-  that task and inspect the output.
+- Commit after each completed task using a concise Conventional Commits style
+  message.
+- Before reporting a task complete, run the relevant verification commands and
+  inspect the output.
 - Keep changes scoped to the files named in the current task unless a required
   fix is impossible without touching another file. If another file is needed,
   explain why in the handoff.
