@@ -23,6 +23,7 @@ from optcg_card_bot.models import (
     CardDetail,
     CardDetailResponse,
     RandomCardResponse,
+    RandomCardSummaryResponse,
     SearchResponse,
 )
 
@@ -137,8 +138,12 @@ class PoneglyphClient:
         payload = await self._request_json("GET", "/random", params=params)
         try:
             return RandomCardResponse.model_validate(payload).data
-        except ValidationError as exc:
-            raise PoneglyphServerError from exc
+        except ValidationError as detail_exc:
+            try:
+                summary = RandomCardSummaryResponse.model_validate(payload).data
+            except ValidationError:
+                raise PoneglyphServerError from detail_exc
+            return await self.get_card(summary.card_number, lang=lang)
 
     async def get_random_from_query(
         self,
