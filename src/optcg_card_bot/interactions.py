@@ -145,6 +145,8 @@ class SearchResultsView(CardSelectView):
         has_more: bool,
         choices: tuple[CardChoice, ...],
         service: CommandService | None = None,
+        sort: str | None = None,
+        order: str | None = None,
     ) -> None:
         super().__init__(
             owner_id=owner_id,
@@ -156,6 +158,8 @@ class SearchResultsView(CardSelectView):
         self.page = page
         self.total = total
         self.has_more = has_more
+        self.sort = sort
+        self.order = order
         self.add_item(
             SearchPageButton(
                 label="Previous",
@@ -195,6 +199,8 @@ class SearchResultsView(CardSelectView):
             outcome = await self.service.search(
                 self.source_query,
                 page=max(1, self.page + page_delta),
+                sort=self.sort,
+                order=self.order,
             )
         except BotError as error:
             await interaction.followup.send(error.user_message, ephemeral=True)
@@ -214,6 +220,8 @@ class SearchResultsView(CardSelectView):
                 has_more=outcome.has_more,
                 choices=outcome.choices,
                 service=self.service,
+                sort=self.sort,
+                order=self.order,
             ),
         )
 
@@ -385,6 +393,8 @@ def create_bot(
                     has_more=outcome.has_more,
                     choices=outcome.choices,
                     service=service,
+                    sort=sort,
+                    order=order,
                 ),
                 ephemeral=True,
             )

@@ -617,6 +617,58 @@ async def test_search_results_next_callback_updates_page() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_results_next_callback_preserves_sort_and_order() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 3 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="type:leader",
+            page=3,
+            total=30,
+            has_more=False,
+        )
+    )
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="type:leader",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+        sort="market_price",
+        order="desc",
+    )
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert service.search_calls == [
+        {
+            "query": "type:leader",
+            "page": 3,
+            "sort": "market_price",
+            "order": "desc",
+        }
+    ]
+    assert isinstance(interaction.edits[0]["view"], SearchResultsView)
+    assert interaction.edits[0]["view"].sort == "market_price"
+    assert interaction.edits[0]["view"].order == "desc"
+
+
+@pytest.mark.asyncio
 async def test_search_results_next_callback_defers_before_search_completes() -> None:
     interaction = FakeInteraction()
     service = BlockingSearchService(
