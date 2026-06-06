@@ -114,6 +114,110 @@ class CardSelectView(discord.ui.View):
         self.add_item(CardSelect(choices))
 
 
+class SearchPageButton(discord.ui.Button["SearchResultsView"]):
+    def __init__(self, *, label: str, page_delta: int, disabled: bool) -> None:
+        super().__init__(
+            label=label,
+            style=discord.ButtonStyle.secondary,
+            disabled=disabled,
+        )
+        self.page_delta = page_delta
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, SearchResultsView):
+            await interaction.response.send_message(
+                "This picker is not available.",
+                ephemeral=True,
+            )
+            return
+        await view.change_page(interaction, self.page_delta)
+
+
+class SearchResultsView(CardSelectView):
+    def __init__(
+        self,
+        *,
+        owner_id: int,
+        source_query: str,
+        page: int,
+        total: int,
+        has_more: bool,
+        choices: tuple[CardChoice, ...],
+        service: CommandService | None = None,
+    ) -> None:
+        super().__init__(
+            owner_id=owner_id,
+            source_query=source_query,
+            action="card",
+            choices=choices,
+            service=service,
+        )
+        self.page = page
+        self.total = total
+        self.has_more = has_more
+        self.add_item(
+            SearchPageButton(
+                label="Previous",
+                page_delta=-1,
+                disabled=page <= 1,
+            )
+        )
+        self.add_item(
+            SearchPageButton(
+                label="Next",
+                page_delta=1,
+                disabled=not has_more,
+            )
+        )
+
+    async def change_page(
+        self,
+        interaction: discord.Interaction,
+        page_delta: int,
+    ) -> None:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Only the command user can use this picker.",
+                ephemeral=True,
+            )
+            return
+        if self.service is None:
+            await interaction.response.send_message(
+                "This picker has expired.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(thinking=False)
+
+        try:
+            outcome = await self.service.search(
+                self.source_query,
+                page=max(1, self.page + page_delta),
+            )
+        except BotError as error:
+            await interaction.followup.send(error.user_message, ephemeral=True)
+            return
+
+        if outcome.kind is not CommandOutcomeKind.PICKER:
+            await interaction.edit_original_response(content=outcome.message, view=None)
+            return
+
+        await interaction.edit_original_response(
+            content=outcome.message,
+            view=SearchResultsView(
+                owner_id=self.owner_id,
+                source_query=self.source_query,
+                page=outcome.page,
+                total=outcome.total,
+                has_more=outcome.has_more,
+                choices=outcome.choices,
+                service=self.service,
+            ),
+        )
+
+
 async def send_outcome(
     interaction: discord.Interaction,
     outcome: CommandOutcome,
@@ -264,10 +368,12 @@ def create_bot(
         if outcome.kind is CommandOutcomeKind.PICKER:
             await interaction.followup.send(
                 outcome.message,
-                view=CardSelectView(
+                view=SearchResultsView(
                     owner_id=interaction.user.id,
                     source_query=query,
-                    action="card",
+                    page=outcome.page,
+                    total=outcome.total,
+                    has_more=outcome.has_more,
                     choices=outcome.choices,
                     service=service,
                 ),
