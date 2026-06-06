@@ -445,6 +445,7 @@ def create_bot(
         card="Card number or Poneglyph query",
         days="Days of price history",
     )
+    @app_commands.autocomplete(card=autocomplete_cards)
     async def price(
         interaction: discord.Interaction,
         card: str,

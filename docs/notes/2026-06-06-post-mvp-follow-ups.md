@@ -1,8 +1,7 @@
 # Post-MVP Follow-Ups
 
-Hold these until explicitly instructed:
+Remaining items to hold until explicitly instructed:
 
-- Add Poneglyph autocomplete to `/price card`.
 - Add picker timeout cleanup that disables expired components or clears service
   state.
 - Add narrow live smoke coverage for autocomplete and price shape checks without
