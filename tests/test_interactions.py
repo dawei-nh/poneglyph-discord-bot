@@ -244,6 +244,31 @@ def test_select_view_tracks_owner_and_query() -> None:
     assert view.timeout == 180
 
 
+@pytest.mark.asyncio
+async def test_select_view_timeout_clears_service_and_disables_components() -> None:
+    service = FakeService()
+    view = CardSelectView(
+        owner_id=123,
+        source_query="luffy",
+        action="card",
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+    )
+
+    await view.on_timeout()
+
+    assert view.service is None
+    assert all(item.disabled is True for item in view.children)
+
+
 def test_search_results_view_has_navigation_buttons() -> None:
     view = SearchResultsView(
         owner_id=123,
@@ -299,6 +324,33 @@ def test_search_results_view_has_navigation_buttons() -> None:
 
     assert last_page_buttons["Previous"].disabled is False
     assert last_page_buttons["Next"].disabled is True
+
+
+@pytest.mark.asyncio
+async def test_search_results_view_timeout_disables_pagination_buttons() -> None:
+    service = FakeService()
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=1,
+        total=30,
+        has_more=True,
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+    )
+
+    await view.on_timeout()
+
+    assert view.service is None
+    assert all(item.disabled is True for item in view.children)
 
 
 def test_create_bot_registers_expected_commands() -> None:
