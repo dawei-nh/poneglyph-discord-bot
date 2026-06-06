@@ -95,6 +95,7 @@ class FakeService:
             f"Card {index}" for index in range(30)
         )
         self.raise_on_autocomplete = False
+        self.search_calls: list[dict[str, object]] = []
 
     async def card(self, query: str) -> CommandOutcome:
         self.queries.append(query)
@@ -107,6 +108,26 @@ class FakeService:
         if self.raise_on_autocomplete:
             raise PoneglyphRateLimitError
         return self.autocomplete_response
+
+    async def search(
+        self,
+        query: str,
+        *,
+        page: int = 1,
+        sort: str | None = None,
+        order: str | None = None,
+    ) -> CommandOutcome:
+        self.search_calls.append(
+            {
+                "query": query,
+                "page": page,
+                "sort": sort,
+                "order": order,
+            }
+        )
+        if self.outcome is None:
+            raise PoneglyphRateLimitError
+        return self.outcome
 
 
 def load_card():
@@ -283,6 +304,69 @@ async def test_card_command_posts_direct_public_outcome_to_channel() -> None:
     assert "embed" in interaction.channel.sends[0]
     assert interaction.deleted_original_response is True
     assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_search_command_forwards_sort_and_order() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("search")
+    assert command is not None
+
+    await command.callback(interaction, "type:leader", "market_price", "desc")
+
+    assert interaction.response.defers == [{"ephemeral": True}]
+    assert service.search_calls == [
+        {
+            "query": "type:leader",
+            "page": 1,
+            "sort": "market_price",
+            "order": "desc",
+        }
+    ]
+    assert len(interaction.followup.sends) == 1
+
+
+def test_search_command_registers_sort_and_order_choices() -> None:
+    bot = create_bot(command_service=None)
+    command = bot.tree.get_command("search")
+    assert command is not None
+
+    params = {parameter.name: parameter for parameter in command.parameters}
+
+    assert [choice.value for choice in params["sort"].choices] == [
+        "relevance",
+        "card_number",
+        "name",
+        "cost",
+        "power",
+        "market_price",
+        "released",
+        "rarity",
+        "color",
+        "artist",
+        "number",
+        "set",
+        "usd",
+    ]
+    assert [choice.value for choice in params["order"].choices] == ["asc", "desc"]
+    assert params["sort"].required is False
+    assert params["order"].required is False
 
 
 @pytest.mark.asyncio

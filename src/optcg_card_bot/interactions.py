@@ -15,6 +15,29 @@ from optcg_card_bot.search import CardChoice, extract_bracket_queries
 MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
 MAX_AUTOCOMPLETE_CHOICES = 25
 DISCORD_CHOICE_VALUE_LIMIT = 100
+SEARCH_SORT_VALUES = (
+    "relevance",
+    "card_number",
+    "name",
+    "cost",
+    "power",
+    "market_price",
+    "released",
+    "rarity",
+    "color",
+    "artist",
+    "number",
+    "set",
+    "usd",
+)
+SEARCH_SORT_CHOICES = [
+    app_commands.Choice(name=sort_value, value=sort_value)
+    for sort_value in SEARCH_SORT_VALUES
+]
+SEARCH_ORDER_CHOICES = [
+    app_commands.Choice(name="asc", value="asc"),
+    app_commands.Choice(name="desc", value="desc"),
+]
 
 
 def build_choice_options(choices: tuple[CardChoice, ...]) -> list[discord.SelectOption]:
@@ -218,13 +241,23 @@ def create_bot(
         await send_outcome(interaction, outcome, public_channel=True)
 
     @bot.tree.command(name="search", description="Browse Poneglyph search results")
-    @app_commands.describe(query="Poneglyph query")
+    @app_commands.describe(
+        query="Poneglyph query",
+        sort="Optional Poneglyph sort field",
+        order="Optional Poneglyph sort order",
+    )
+    @app_commands.choices(sort=SEARCH_SORT_CHOICES, order=SEARCH_ORDER_CHOICES)
     @app_commands.autocomplete(query=autocomplete_cards)
-    async def search(interaction: discord.Interaction, query: str) -> None:
+    async def search(
+        interaction: discord.Interaction,
+        query: str,
+        sort: str | None = None,
+        order: str | None = None,
+    ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
         try:
-            outcome = await service.search(query)
+            outcome = await service.search(query, sort=sort, order=order)
         except BotError as error:
             await send_error(interaction, error)
             return
