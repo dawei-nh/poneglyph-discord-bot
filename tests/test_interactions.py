@@ -7,6 +7,7 @@ from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind
 from optcg_card_bot.errors import PoneglyphRateLimitError
 from optcg_card_bot.interactions import (
     CardSelectView,
+    autocomplete_card_choices,
     build_choice_options,
     create_bot,
     prepare_bracket_queries,
@@ -89,12 +90,23 @@ class FakeService:
     def __init__(self, outcome: CommandOutcome | None = None) -> None:
         self.outcome = outcome
         self.queries: list[str] = []
+        self.autocomplete_queries: list[str] = []
+        self.autocomplete_response: tuple[str, ...] = tuple(
+            f"Card {index}" for index in range(30)
+        )
+        self.raise_on_autocomplete = False
 
     async def card(self, query: str) -> CommandOutcome:
         self.queries.append(query)
         if self.outcome is None:
             raise PoneglyphRateLimitError
         return self.outcome
+
+    async def autocomplete_cards(self, query: str) -> tuple[str, ...]:
+        self.autocomplete_queries.append(query)
+        if self.raise_on_autocomplete:
+            raise PoneglyphRateLimitError
+        return self.autocomplete_response
 
 
 def load_card():
@@ -149,6 +161,53 @@ def test_create_bot_registers_expected_commands() -> None:
     names = {command.name for command in bot.tree.get_commands()}
 
     assert {"card", "search", "random", "faq", "help"} <= names
+
+
+@pytest.mark.asyncio
+async def test_autocomplete_card_choices_returns_capped_trimmed_choices() -> None:
+    service = FakeService()
+    service.autocomplete_response = ("Monkey.D.Luffy", "Roronoa Zoro" * 12) + tuple(
+        f"Card {index}" for index in range(30)
+    )
+
+    choices = await autocomplete_card_choices(service, "luffy")
+
+    truncated_long_choice = ("Roronoa Zoro" * 12)[:100]
+    assert service.autocomplete_queries == ["luffy"]
+    assert [(choice.name, choice.value) for choice in choices[:2]] == [
+        ("Monkey.D.Luffy", "Monkey.D.Luffy"),
+        (truncated_long_choice, truncated_long_choice),
+    ]
+    assert len(choices) == 25
+    assert all(len(choice.name) <= 100 for choice in choices)
+    assert all(len(choice.value) <= 100 for choice in choices)
+
+
+@pytest.mark.asyncio
+async def test_autocomplete_card_choices_returns_empty_choices_for_bot_error() -> None:
+    service = FakeService()
+    service.raise_on_autocomplete = True
+
+    choices = await autocomplete_card_choices(service, "luffy")
+
+    assert choices == []
+
+
+def test_card_oriented_commands_have_poneglyph_autocomplete() -> None:
+    bot = create_bot(command_service=FakeService())
+
+    expected_params = {
+        "card": "query",
+        "search": "query",
+        "random": "query",
+        "faq": "card",
+    }
+    for command_name, parameter_name in expected_params.items():
+        command = bot.tree.get_command(command_name)
+        assert command is not None
+        parameter = command.get_parameter(parameter_name)
+        assert parameter is not None
+        assert parameter.autocomplete is not None
 
 
 def test_create_bot_can_enable_bracket_listener() -> None:

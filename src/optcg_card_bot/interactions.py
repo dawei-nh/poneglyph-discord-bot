@@ -13,6 +13,8 @@ from optcg_card_bot.errors import BotError
 from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
 MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
+MAX_AUTOCOMPLETE_CHOICES = 25
+DISCORD_CHOICE_VALUE_LIMIT = 100
 
 
 def build_choice_options(choices: tuple[CardChoice, ...]) -> list[discord.SelectOption]:
@@ -144,6 +146,29 @@ def prepare_bracket_queries(content: str) -> tuple[str, ...]:
     return tuple(queries)
 
 
+def build_autocomplete_choices(
+    values: tuple[str, ...],
+) -> list[app_commands.Choice[str]]:
+    return [
+        app_commands.Choice(
+            name=value[:DISCORD_CHOICE_VALUE_LIMIT],
+            value=value[:DISCORD_CHOICE_VALUE_LIMIT],
+        )
+        for value in values[:MAX_AUTOCOMPLETE_CHOICES]
+    ]
+
+
+async def autocomplete_card_choices(
+    service: CommandService,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    try:
+        choices = await service.autocomplete_cards(current)
+    except BotError:
+        return []
+    return build_autocomplete_choices(choices)
+
+
 class SyncingBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.tree.sync()
@@ -159,8 +184,16 @@ def create_bot(
         intents.message_content = True
     bot = SyncingBot(command_prefix=commands.when_mentioned, intents=intents)
 
+    async def autocomplete_cards(
+        _interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        service = _require_service(command_service)
+        return await autocomplete_card_choices(service, current)
+
     @bot.tree.command(name="card", description="Search and post a Poneglyph card")
     @app_commands.describe(query="Poneglyph query or card number")
+    @app_commands.autocomplete(query=autocomplete_cards)
     async def card(interaction: discord.Interaction, query: str) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -186,6 +219,7 @@ def create_bot(
 
     @bot.tree.command(name="search", description="Browse Poneglyph search results")
     @app_commands.describe(query="Poneglyph query")
+    @app_commands.autocomplete(query=autocomplete_cards)
     async def search(interaction: discord.Interaction, query: str) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -211,6 +245,7 @@ def create_bot(
 
     @bot.tree.command(name="random", description="Post a random Poneglyph card")
     @app_commands.describe(query="Optional Poneglyph query or simple random filters")
+    @app_commands.autocomplete(query=autocomplete_cards)
     async def random_card(interaction: discord.Interaction, query: str = "") -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=False)
@@ -223,6 +258,7 @@ def create_bot(
 
     @bot.tree.command(name="faq", description="Post official FAQ for a card")
     @app_commands.describe(card="Card number or Poneglyph query")
+    @app_commands.autocomplete(card=autocomplete_cards)
     async def faq(interaction: discord.Interaction, card: str) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)

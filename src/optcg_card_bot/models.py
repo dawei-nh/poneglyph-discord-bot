@@ -132,6 +132,10 @@ class RandomCardResponse(StrictModel):
     data: CardDetail
 
 
+class AutocompleteResponse(StrictModel):
+    data: list[str]
+
+
 class SearchParams(StrictModel):
     q: str | None = None
     page: int = 1
