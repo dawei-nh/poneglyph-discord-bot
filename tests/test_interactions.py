@@ -318,6 +318,18 @@ def test_create_bot_registers_price_command() -> None:
     assert {param.name for param in command.parameters} == {"card", "days"}
 
 
+def test_price_command_limits_days_to_api_range() -> None:
+    bot = create_bot(command_service=None)
+    command = bot.tree.get_command("price")
+    assert command is not None
+
+    days = command.get_parameter("days")
+
+    assert days is not None
+    assert days.min_value == 1
+    assert days.max_value == 365
+
+
 @pytest.mark.asyncio
 async def test_autocomplete_card_choices_returns_capped_trimmed_choices() -> None:
     service = FakeService()
@@ -614,6 +626,58 @@ async def test_search_results_next_callback_updates_page() -> None:
     assert interaction.edits[0]["content"] == "Search results | Page 3 | 30 total"
     assert isinstance(interaction.edits[0]["view"], SearchResultsView)
     assert interaction.edits[0]["view"].page == 3
+
+
+@pytest.mark.asyncio
+async def test_search_results_next_callback_preserves_sort_and_order() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 3 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="type:leader",
+            page=3,
+            total=30,
+            has_more=False,
+        )
+    )
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="type:leader",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+        sort="market_price",
+        order="desc",
+    )
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert service.search_calls == [
+        {
+            "query": "type:leader",
+            "page": 3,
+            "sort": "market_price",
+            "order": "desc",
+        }
+    ]
+    assert isinstance(interaction.edits[0]["view"], SearchResultsView)
+    assert interaction.edits[0]["view"].sort == "market_price"
+    assert interaction.edits[0]["view"].order == "desc"
 
 
 @pytest.mark.asyncio

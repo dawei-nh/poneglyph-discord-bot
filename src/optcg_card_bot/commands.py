@@ -205,6 +205,13 @@ class CommandService:
         )
 
     async def price(self, query: str, *, days: int = 30) -> CommandOutcome:
+        if days < 1 or days > 365:
+            return CommandOutcome(
+                kind=CommandOutcomeKind.EPHEMERAL_MESSAGE,
+                message="Price history days must be between 1 and 365.",
+                source_query=query,
+            )
+
         card_outcome = await self.card(query)
         if card_outcome.kind is CommandOutcomeKind.PICKER:
             return CommandOutcome(
