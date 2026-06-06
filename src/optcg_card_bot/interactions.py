@@ -113,6 +113,12 @@ class CardSelectView(discord.ui.View):
         self.price_days = price_days
         self.add_item(CardSelect(choices))
 
+    async def on_timeout(self) -> None:
+        self.service = None
+        for item in self.children:
+            if isinstance(item, discord.ui.Button | discord.ui.Select):
+                item.disabled = True
+
 
 class SearchPageButton(discord.ui.Button["SearchResultsView"]):
     def __init__(self, *, label: str, page_delta: int, disabled: bool) -> None:
