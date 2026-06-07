@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Protocol, cast
 
 import discord
 from discord import app_commands
@@ -38,6 +38,16 @@ SEARCH_ORDER_CHOICES = [
     app_commands.Choice(name="asc", value="asc"),
     app_commands.Choice(name="desc", value="desc"),
 ]
+PICKER_EXPIRED_MESSAGE = "This picker expired. Run the command again."
+
+
+class EditablePickerMessage(Protocol):
+    async def edit(
+        self,
+        *,
+        content: str | None = None,
+        view: discord.ui.View | None = None,
+    ) -> object: ...
 
 
 def build_choice_options(choices: tuple[CardChoice, ...]) -> list[discord.SelectOption]:
@@ -111,13 +121,23 @@ class CardSelectView(discord.ui.View):
         self.action = action
         self.service = service
         self.price_days = price_days
+        self._message: EditablePickerMessage | None = None
         self.add_item(CardSelect(choices))
+
+    def bind_message(self, message: EditablePickerMessage | None) -> None:
+        self._message = message
 
     async def on_timeout(self) -> None:
         self.service = None
         for item in self.children:
             if isinstance(item, discord.ui.Button | discord.ui.Select):
                 item.disabled = True
+        if self._message is None:
+            return
+        try:
+            await self._message.edit(content=PICKER_EXPIRED_MESSAGE, view=self)
+        except discord.HTTPException:
+            return
 
 
 class SearchPageButton(discord.ui.Button["SearchResultsView"]):
@@ -214,22 +234,40 @@ class SearchResultsView(CardSelectView):
 
         if outcome.kind is not CommandOutcomeKind.PICKER:
             await interaction.edit_original_response(content=outcome.message, view=None)
+            self.bind_message(None)
             return
 
-        await interaction.edit_original_response(
-            content=outcome.message,
-            view=SearchResultsView(
-                owner_id=self.owner_id,
-                source_query=self.source_query,
-                page=outcome.page,
-                total=outcome.total,
-                has_more=outcome.has_more,
-                choices=outcome.choices,
-                service=self.service,
-                sort=self.sort,
-                order=self.order,
-            ),
+        next_view = SearchResultsView(
+            owner_id=self.owner_id,
+            source_query=self.source_query,
+            page=outcome.page,
+            total=outcome.total,
+            has_more=outcome.has_more,
+            choices=outcome.choices,
+            service=self.service,
+            sort=self.sort,
+            order=self.order,
         )
+        message = await interaction.edit_original_response(
+            content=outcome.message,
+            view=next_view,
+        )
+        next_view.bind_message(cast("EditablePickerMessage | None", message))
+        self.bind_message(None)
+
+
+async def send_picker_followup(
+    interaction: discord.Interaction,
+    message: str,
+    view: CardSelectView,
+) -> None:
+    sent_message = await interaction.followup.send(
+        message,
+        view=view,
+        ephemeral=True,
+        wait=True,
+    )
+    view.bind_message(cast("EditablePickerMessage | None", sent_message))
 
 
 async def send_outcome(
@@ -353,16 +391,16 @@ def create_bot(
             await send_error(interaction, error)
             return
         if outcome.kind is CommandOutcomeKind.PICKER:
-            await interaction.followup.send(
+            await send_picker_followup(
+                interaction,
                 outcome.message,
-                view=CardSelectView(
+                CardSelectView(
                     owner_id=interaction.user.id,
                     source_query=query,
                     action="card",
                     choices=outcome.choices,
                     service=service,
                 ),
-                ephemeral=True,
             )
             return
         await send_outcome(interaction, outcome, public_channel=True)
@@ -389,9 +427,10 @@ def create_bot(
             await send_error(interaction, error)
             return
         if outcome.kind is CommandOutcomeKind.PICKER:
-            await interaction.followup.send(
+            await send_picker_followup(
+                interaction,
                 outcome.message,
-                view=SearchResultsView(
+                SearchResultsView(
                     owner_id=interaction.user.id,
                     source_query=query,
                     page=outcome.page,
@@ -402,7 +441,6 @@ def create_bot(
                     sort=sort,
                     order=order,
                 ),
-                ephemeral=True,
             )
             return
         await send_outcome(interaction, outcome)
@@ -432,16 +470,16 @@ def create_bot(
             await send_error(interaction, error)
             return
         if outcome.kind is CommandOutcomeKind.PICKER:
-            await interaction.followup.send(
+            await send_picker_followup(
+                interaction,
                 outcome.message,
-                view=CardSelectView(
+                CardSelectView(
                     owner_id=interaction.user.id,
                     source_query=card,
                     action="faq",
                     choices=outcome.choices,
                     service=service,
                 ),
-                ephemeral=True,
             )
             return
         await send_outcome(interaction, outcome, public_channel=True)
@@ -465,9 +503,10 @@ def create_bot(
             await send_error(interaction, error)
             return
         if outcome.kind is CommandOutcomeKind.PICKER:
-            await interaction.followup.send(
+            await send_picker_followup(
+                interaction,
                 outcome.message,
-                view=CardSelectView(
+                CardSelectView(
                     owner_id=interaction.user.id,
                     source_query=card,
                     action="price",
@@ -475,7 +514,6 @@ def create_bot(
                     service=service,
                     price_days=days,
                 ),
-                ephemeral=True,
             )
             return
         await send_outcome(interaction, outcome, public_channel=True)
