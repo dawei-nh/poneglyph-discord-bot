@@ -4,6 +4,7 @@ import discord
 
 from optcg_card_bot.models import (
     CardDetail,
+    CardVariant,
     FAQEntry,
     PricePoint,
     best_image_url,
@@ -54,6 +55,9 @@ def build_card_embed(card: CardDetail) -> discord.Embed:
     price = best_price(variant)
     if price:
         _add_field_if_fits(embed, "Market", f"${price}", inline=True)
+    variants = _variant_field_value(card)
+    if variants:
+        _add_field_if_fits(embed, "Variants", variants, inline=False)
     legality = _format_legality(card)
     if legality:
         _add_field_if_fits(embed, "Legality", legality, inline=False)
@@ -118,7 +122,7 @@ def build_price_embed(
     for price in prices:
         if not _add_field_if_fits(
             embed,
-            price.label or f"Variant {price.variant_index}",
+            _price_field_name(price),
             _price_field_value(price),
             inline=False,
         ):
@@ -155,10 +159,37 @@ def _format_legality(card: CardDetail) -> str:
     )
 
 
+def _variant_field_value(card: CardDetail) -> str:
+    lines = [_variant_line(variant) for variant in card.variants]
+    return "\n".join(line for line in lines if line)
+
+
+def _variant_line(variant: CardVariant) -> str:
+    heading = f"#{variant.index}"
+    if variant.label:
+        heading = f"{heading} {variant.label}"
+    parts = [heading]
+    if variant.product.name:
+        parts.append(variant.product.name)
+    price = best_price(variant)
+    if price:
+        parts.append(f"Market: ${price}")
+    return " | ".join(parts)
+
+
 def _faq_footer(omitted_count: int) -> str:
     if omitted_count <= 0:
         return POWERED_BY
     return f"{POWERED_BY} | {omitted_count} official FAQ entries not shown"
+
+
+def _price_field_name(price: PricePoint) -> str:
+    name = f"Variant {price.variant_index}"
+    if price.label:
+        name = f"{name}: {price.label}"
+    if price.sub_type:
+        name = f"{name} ({price.sub_type})"
+    return name
 
 
 def _price_field_value(price: PricePoint) -> str:

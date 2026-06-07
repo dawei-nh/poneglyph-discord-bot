@@ -7,8 +7,6 @@ apply to every agent working in this repo.
 
 - Use `docs/architecture.md` for product intent, architecture boundaries,
   command behavior, API guardrails, and edge-case decisions.
-- Use `docs/notes/2026-06-06-post-mvp-follow-ups.md` for remaining known
-  follow-up work.
 - Work one scoped task at a time. Do not skip ahead, combine unrelated tasks, or
   broaden scope without explicit user approval.
 

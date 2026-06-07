@@ -48,6 +48,16 @@ def test_card_embed_uses_image_fallback() -> None:
     )
 
 
+def test_card_embed_lists_variant_context() -> None:
+    embed = build_card_embed(load_card())
+
+    variants = next(field for field in embed.fields if field.name == "Variants")
+
+    assert "#0 Standard | Romance Dawn | Market: $1.91" in variants.value
+    assert "#1 Alternate Art | Romance Dawn | Market: $558.38" in variants.value
+    assert "#2 Alternate Art | 25th Edition | Market: $62.19" in variants.value
+
+
 def test_faq_embed_uses_official_faq_entries() -> None:
     card = load_card()
 
@@ -89,7 +99,7 @@ def test_price_embed_lists_variant_prices() -> None:
     assert embed.title == "Prices: Roronoa Zoro"
     assert embed.url == "https://poneglyph.one/cards/OP01-001?lang=en"
     assert embed.footer.text == "Powered by Poneglyph"
-    assert embed.fields[0].name == "Super Pre-Release"
+    assert embed.fields[0].name == "Variant 0: Super Pre-Release (Alternate Art)"
     assert "Market: $1.91" in embed.fields[0].value
     assert "Low: $1.00" in embed.fields[0].value
     assert "Mid: $2.25" in embed.fields[0].value
