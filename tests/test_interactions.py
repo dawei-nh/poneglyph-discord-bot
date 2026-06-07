@@ -26,8 +26,21 @@ class FakeFollowup:
     def __init__(self) -> None:
         self.sends: list[dict[str, object]] = []
 
-    async def send(self, *args: object, **kwargs: object) -> None:
-        self.sends.append({"args": args, **kwargs})
+    async def send(self, *args: object, **kwargs: object) -> object | None:
+        send: dict[str, object] = {"args": args, **kwargs}
+        if kwargs.get("wait") is True:
+            send["message"] = FakeEditableMessage()
+        self.sends.append(send)
+        return send.get("message")
+
+
+class FakeEditableMessage:
+    def __init__(self) -> None:
+        self.edits: list[dict[str, object]] = []
+
+    async def edit(self, **kwargs: object) -> object:
+        self.edits.append(kwargs)
+        return self
 
 
 class FakeChannel:
@@ -50,8 +63,13 @@ class FakeInteraction:
     async def delete_original_response(self) -> None:
         self.deleted_original_response = True
 
-    async def edit_original_response(self, **kwargs: object) -> None:
+    async def edit_original_response(self, **kwargs: object) -> object | None:
         self.edits.append(kwargs)
+        if "view" in kwargs:
+            message = FakeEditableMessage()
+            kwargs["message"] = message
+            return message
+        return None
 
 
 class FakeInteractionWithoutDelete:
@@ -558,6 +576,47 @@ async def test_card_and_faq_ambiguous_commands_use_card_select_view() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_card_picker_message_is_edited_on_timeout() -> None:
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Select a card",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("card")
+    assert command is not None
+    interaction = FakeInteraction()
+
+    await command.callback(interaction, "luffy")
+
+    send = interaction.followup.sends[0]
+    assert send["wait"] is True
+    view = send["view"]
+    message = send["message"]
+    assert isinstance(view, CardSelectView)
+    assert isinstance(message, FakeEditableMessage)
+
+    await view.on_timeout()
+
+    assert message.edits == [
+        {
+            "content": "This picker expired. Run the command again.",
+            "view": view,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_command_sends_search_results_view() -> None:
     interaction = FakeInteraction()
     service = FakeService(
@@ -679,6 +738,101 @@ async def test_search_results_next_callback_updates_page() -> None:
     assert interaction.edits[0]["content"] == "Search results | Page 3 | 30 total"
     assert isinstance(interaction.edits[0]["view"], SearchResultsView)
     assert interaction.edits[0]["view"].page == 3
+
+
+@pytest.mark.asyncio
+async def test_search_results_next_callback_binds_updated_view_message() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 3 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="luffy",
+            page=3,
+            total=30,
+            has_more=False,
+        )
+    )
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+    )
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    new_view = interaction.edits[0]["view"]
+    message = interaction.edits[0]["message"]
+    assert isinstance(new_view, SearchResultsView)
+    assert isinstance(message, FakeEditableMessage)
+
+    await new_view.on_timeout()
+
+    assert message.edits == [
+        {
+            "content": "This picker expired. Run the command again.",
+            "view": new_view,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_results_next_callback_unbinds_replaced_view_message() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 3 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="luffy",
+            page=3,
+            total=30,
+            has_more=False,
+        )
+    )
+    view = SearchResultsView(
+        owner_id=123,
+        source_query="luffy",
+        page=2,
+        total=30,
+        has_more=True,
+        choices=service.outcome.choices,
+        service=service,
+    )
+    original_message = FakeEditableMessage()
+    view.bind_message(original_message)
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+    await view.on_timeout()
+
+    assert original_message.edits == []
 
 
 @pytest.mark.asyncio
