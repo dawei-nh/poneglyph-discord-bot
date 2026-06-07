@@ -117,8 +117,8 @@ remove real complexity or match an established boundary.
 
 Single-card embeds should include the card name, Poneglyph card URL, best
 available image, compact gameplay/card text, set and card number, rarity, type
-and color, core stats, traits, legality, price when available, and a Poneglyph
-footer.
+and color, core stats, traits, legality, price when available, variant context,
+and a Poneglyph footer.
 
 Image selection order:
 
@@ -134,6 +134,10 @@ fall back to `/v1/cards/{card_number}/text`; card text is not FAQ.
 Price output must avoid asserting that volatile market data is present. If a
 price response lacks optional values, render the useful available fields or a
 clear no-data message.
+
+Variant output should stay compact: show variant indexes, labels, products, and
+best available market value when present so users can distinguish standard,
+alternate-art, promo, and product-specific printings without a separate command.
 
 ## Deployment Shape
 
