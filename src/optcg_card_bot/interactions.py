@@ -10,6 +10,7 @@ from discord.ext import commands
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind, CommandService
 from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
 from optcg_card_bot.errors import BotError
+from optcg_card_bot.models import CardDetail
 from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
 MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
@@ -45,11 +46,12 @@ MISSING_CHANNEL_ACCESS_MESSAGE = (
 )
 
 
-class EditablePickerMessage(Protocol):
+class EditableMessage(Protocol):
     async def edit(
         self,
         *,
         content: str | None = None,
+        embed: discord.Embed | None = None,
         view: discord.ui.View | None = None,
     ) -> object: ...
 
@@ -63,6 +65,84 @@ def build_choice_options(choices: tuple[CardChoice, ...]) -> list[discord.Select
         )
         for choice in choices[:25]
     ]
+
+
+class VariantImageButton(discord.ui.Button["VariantImageView"]):
+    def __init__(self, *, label: str, variant_delta: int) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.secondary)
+        self.variant_delta = variant_delta
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, VariantImageView):
+            await interaction.response.send_message(
+                "Variant controls are not available.",
+                ephemeral=True,
+            )
+            return
+        await view.change_variant(interaction, self.variant_delta)
+
+
+class VariantImageView(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        owner_id: int,
+        card: CardDetail,
+        variant_position: int = 0,
+    ) -> None:
+        super().__init__(timeout=180)
+        self.owner_id = owner_id
+        self.card = card
+        self.variant_position = (
+            variant_position % len(card.variants) if card.variants else 0
+        )
+        self._message: EditableMessage | None = None
+        self.add_item(VariantImageButton(label="Previous", variant_delta=-1))
+        self.add_item(VariantImageButton(label="Next", variant_delta=1))
+
+    def bind_message(self, message: EditableMessage | None) -> None:
+        self._message = message
+
+    async def change_variant(
+        self,
+        interaction: discord.Interaction,
+        variant_delta: int,
+    ) -> None:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Only the command user can cycle variants.",
+                ephemeral=True,
+            )
+            return
+        if len(self.card.variants) <= 1:
+            await interaction.response.send_message(
+                "This card has no alternate variant images.",
+                ephemeral=True,
+            )
+            return
+
+        self.variant_position = (self.variant_position + variant_delta) % len(
+            self.card.variants
+        )
+        await interaction.response.edit_message(
+            embed=build_card_embed(
+                self.card,
+                variant_position=self.variant_position,
+            ),
+            view=self,
+        )
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button | discord.ui.Select):
+                item.disabled = True
+        if self._message is None:
+            return
+        try:
+            await self._message.edit(view=self)
+        except discord.HTTPException:
+            return
 
 
 class CardSelect(discord.ui.Select[discord.ui.View]):
@@ -105,7 +185,7 @@ class CardSelect(discord.ui.Select[discord.ui.View]):
         except BotError as error:
             await send_error(interaction, error)
             return
-        await send_outcome(interaction, outcome)
+        await send_outcome(interaction, outcome, public_channel=True)
 
 
 class CardSelectView(discord.ui.View):
@@ -125,10 +205,10 @@ class CardSelectView(discord.ui.View):
         self.action = action
         self.service = service
         self.price_days = price_days
-        self._message: EditablePickerMessage | None = None
+        self._message: EditableMessage | None = None
         self.add_item(CardSelect(choices))
 
-    def bind_message(self, message: EditablePickerMessage | None) -> None:
+    def bind_message(self, message: EditableMessage | None) -> None:
         self._message = message
 
     async def on_timeout(self) -> None:
@@ -256,7 +336,7 @@ class SearchResultsView(CardSelectView):
             content=outcome.message,
             view=next_view,
         )
-        next_view.bind_message(cast("EditablePickerMessage | None", message))
+        next_view.bind_message(cast("EditableMessage | None", message))
         self.bind_message(None)
 
 
@@ -271,7 +351,17 @@ async def send_picker_followup(
         ephemeral=True,
         wait=True,
     )
-    view.bind_message(cast("EditablePickerMessage | None", sent_message))
+    view.bind_message(cast("EditableMessage | None", sent_message))
+
+
+def _variant_image_view(
+    card: CardDetail,
+    *,
+    owner_id: int,
+) -> VariantImageView | None:
+    if len(card.variants) <= 1:
+        return None
+    return VariantImageView(owner_id=owner_id, card=card)
 
 
 async def _send_public_embed(
@@ -279,11 +369,16 @@ async def _send_public_embed(
     embed: discord.Embed,
     *,
     public_channel: bool,
+    view: VariantImageView | None = None,
 ) -> None:
     if public_channel and hasattr(interaction.channel, "send"):
         channel = cast("Messageable", interaction.channel)
         try:
-            await channel.send(embed=embed)
+            if view is None:
+                await channel.send(embed=embed)
+            else:
+                sent_message = await channel.send(embed=embed, view=view)
+                view.bind_message(cast("EditableMessage | None", sent_message))
         except discord.Forbidden:
             await interaction.followup.send(
                 MISSING_CHANNEL_ACCESS_MESSAGE,
@@ -292,7 +387,16 @@ async def _send_public_embed(
             return
         await _clear_original_response(interaction)
         return
-    await interaction.followup.send(embed=embed, ephemeral=False)
+    if view is None:
+        await interaction.followup.send(embed=embed, ephemeral=False)
+        return
+    sent_message = await interaction.followup.send(
+        embed=embed,
+        view=view,
+        ephemeral=False,
+        wait=True,
+    )
+    view.bind_message(cast("EditableMessage | None", sent_message))
 
 
 async def send_outcome(
@@ -303,7 +407,12 @@ async def send_outcome(
 ) -> None:
     if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card is not None:
         embed = build_card_embed(outcome.card)
-        await _send_public_embed(interaction, embed, public_channel=public_channel)
+        await _send_public_embed(
+            interaction,
+            embed,
+            public_channel=public_channel,
+            view=_variant_image_view(outcome.card, owner_id=interaction.user.id),
+        )
         return
     if outcome.kind is CommandOutcomeKind.PUBLIC_FAQ and outcome.card is not None:
         embed = build_faq_embed(outcome.card, outcome.faq_entries)

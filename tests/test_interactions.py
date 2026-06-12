@@ -10,6 +10,7 @@ from optcg_card_bot.errors import PoneglyphRateLimitError
 from optcg_card_bot.interactions import (
     CardSelectView,
     SearchResultsView,
+    VariantImageView,
     autocomplete_card_choices,
     build_choice_options,
     create_bot,
@@ -91,6 +92,7 @@ class FakeInteractionWithoutDelete:
     def __init__(self) -> None:
         self.followup = FakeFollowup()
         self.channel = FakeChannel()
+        self.user = FakeUser()
         self.edits: list[dict[str, object]] = []
 
     async def edit_original_response(self, **kwargs: object) -> None:
@@ -275,6 +277,51 @@ def test_select_view_tracks_owner_and_query() -> None:
     assert view.source_query == "luffy"
     assert view.action == "card"
     assert view.timeout == 180
+
+
+def test_variant_image_view_tracks_owner_and_card_variants() -> None:
+    view = VariantImageView(owner_id=123, card=load_card())
+
+    assert view.owner_id == 123
+    assert view.variant_position == 0
+    assert len(view.children) == 2
+
+
+@pytest.mark.asyncio
+async def test_variant_image_view_next_button_updates_public_embed() -> None:
+    interaction = FakeInteraction()
+    view = VariantImageView(owner_id=123, card=load_card())
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert view.variant_position == 1
+    assert interaction.response.edits[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
+    )
+    assert interaction.response.edits[0]["view"] is view
+
+
+@pytest.mark.asyncio
+async def test_variant_image_view_only_allows_original_user() -> None:
+    interaction = FakeInteraction()
+    interaction.user = FakeUser(user_id=999)
+    view = VariantImageView(owner_id=123, card=load_card())
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert view.variant_position == 0
+    assert interaction.response.messages == [
+        {
+            "args": ("Only the command user can cycle variants.",),
+            "ephemeral": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -497,6 +544,58 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     assert "embed" in interaction.channel.sends[0]
     assert interaction.deleted_original_response is True
     assert interaction.edits == []
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_public_card_outcome_attaches_variant_image_controls() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    assert len(interaction.channel.sends) == 1
+    view = interaction.channel.sends[0]["view"]
+    assert isinstance(view, VariantImageView)
+    assert view.owner_id == interaction.user.id
+
+
+@pytest.mark.asyncio
+async def test_card_picker_selection_posts_publicly_and_clears_picker() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    view = CardSelectView(
+        owner_id=123,
+        source_query="zoro",
+        action="card",
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+    )
+    select = view.children[0]
+    select._values = ["OP01-001"]
+
+    await select.callback(interaction)
+
+    assert service.queries == ["OP01-001"]
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
     assert interaction.followup.sends == []
 
 
@@ -1159,8 +1258,10 @@ async def test_price_picker_selection_preserves_requested_days() -> None:
     await select.callback(interaction)
 
     assert service.price_calls == [("OP01-001", 7)]
-    assert len(interaction.followup.sends) == 1
-    assert "embed" in interaction.followup.sends[0]
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
+    assert interaction.followup.sends == []
 
 
 @pytest.mark.asyncio

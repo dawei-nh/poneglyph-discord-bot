@@ -9,8 +9,8 @@ from optcg_card_bot.models import (
     PricePoint,
     best_image_url,
     best_price,
-    best_variant,
     poneglyph_card_url,
+    variant_at_position,
 )
 
 EMBED_TITLE_LIMIT = 256
@@ -23,15 +23,18 @@ EMBED_TOTAL_TEXT_LIMIT = 6000
 POWERED_BY = "Powered by Poneglyph"
 
 
-def build_card_embed(card: CardDetail) -> discord.Embed:
-    variant = best_variant(card)
+def build_card_embed(card: CardDetail, *, variant_position: int = 0) -> discord.Embed:
+    variant = variant_at_position(card, variant_position)
     embed = discord.Embed(
         title=_truncate(card.name, EMBED_TITLE_LIMIT),
         url=poneglyph_card_url(card.card_number, card.language),
         color=discord.Color.red(),
     )
     embed.set_footer(
-        text=_truncate(_card_footer(card), _remaining_footer_budget(embed))
+        text=_truncate(
+            _card_footer(card, variant_position=variant_position),
+            _remaining_footer_budget(embed),
+        )
     )
     embed.description = _truncate(
         _card_description(card),
@@ -64,8 +67,8 @@ def build_card_embed(card: CardDetail) -> discord.Embed:
     return embed
 
 
-def _card_footer(card: CardDetail) -> str:
-    variant = best_variant(card)
+def _card_footer(card: CardDetail, *, variant_position: int = 0) -> str:
+    variant = variant_at_position(card, variant_position)
     footer_parts: list[str] = []
     if variant and variant.product.name:
         footer_parts.append(variant.product.name)

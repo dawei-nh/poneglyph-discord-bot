@@ -48,6 +48,17 @@ def test_card_embed_uses_image_fallback() -> None:
     )
 
 
+def test_card_embed_can_render_non_default_variant_image() -> None:
+    embed = build_card_embed(load_card(), variant_position=1)
+
+    assert embed.image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
+    )
+    assert "Alternate Art" in embed.footer.text
+    market = next(field for field in embed.fields if field.name == "Market")
+    assert market.value == "$558.38"
+
+
 def test_card_embed_lists_variant_context() -> None:
     embed = build_card_embed(load_card())
 
