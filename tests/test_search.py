@@ -80,6 +80,7 @@ async def test_ambiguous_query_returns_choices() -> None:
     assert len(resolution.choices) == 2
     assert client.queries_requested == ["luffy"]
 
+
 @pytest.mark.parametrize("query", ["Mosshead", "MOSS", "moss-head", "moss head"])
 @pytest.mark.asyncio
 async def test_mosshead_aliases_resolve_as_zoro_queries(query: str) -> None:

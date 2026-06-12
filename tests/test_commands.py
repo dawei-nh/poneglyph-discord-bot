@@ -115,6 +115,7 @@ async def test_search_always_returns_picker() -> None:
     assert outcome.kind is CommandOutcomeKind.PICKER
     assert outcome.message == "Search results | Page 1 | 126 total"
 
+
 @pytest.mark.parametrize("query", ["Mosshead", "MOSS", "moss-head", "moss head"])
 @pytest.mark.asyncio
 async def test_search_mosshead_aliases_query_zoro(query: str) -> None:
