@@ -17,7 +17,7 @@ def test_dockerfile_uses_pinned_alpine_bases() -> None:
 
     assert (
         "FROM python:3.12-alpine@"
-        "sha256:236173eb74001afe2f60862de935b74fcbd00adfca247b2c27051a70a6a39a2d"
+        "sha256:dbb1970cc04ce7d381c65efe8309c0c03d463e5b35c88f14d721796ad24cfbfd"
     ) in dockerfile
     assert (
         "COPY --from=ghcr.io/astral-sh/uv:0.5.31-alpine@"

@@ -51,6 +51,7 @@ class FakeChannel:
     async def send(self, *args: object, **kwargs: object) -> None:
         self.sends.append({"args": args, **kwargs})
 
+
 class FakeForbiddenResponse:
     status = 403
     reason = "Forbidden"
@@ -497,6 +498,7 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     assert interaction.deleted_original_response is True
     assert interaction.edits == []
     assert interaction.followup.sends == []
+
 
 @pytest.mark.asyncio
 async def test_public_outcome_reports_missing_channel_access_ephemerally() -> None:

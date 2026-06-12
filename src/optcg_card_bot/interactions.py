@@ -273,6 +273,7 @@ async def send_picker_followup(
     )
     view.bind_message(cast("EditablePickerMessage | None", sent_message))
 
+
 async def _send_public_embed(
     interaction: discord.Interaction,
     embed: discord.Embed,
