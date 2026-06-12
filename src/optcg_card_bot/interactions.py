@@ -39,6 +39,10 @@ SEARCH_ORDER_CHOICES = [
     app_commands.Choice(name="desc", value="desc"),
 ]
 PICKER_EXPIRED_MESSAGE = "This picker expired. Run the command again."
+MISSING_CHANNEL_ACCESS_MESSAGE = (
+    "I couldn't post publicly in this channel. "
+    "Check that the bot can view and send messages here."
+)
 
 
 class EditablePickerMessage(Protocol):
@@ -269,6 +273,26 @@ async def send_picker_followup(
     )
     view.bind_message(cast("EditablePickerMessage | None", sent_message))
 
+async def _send_public_embed(
+    interaction: discord.Interaction,
+    embed: discord.Embed,
+    *,
+    public_channel: bool,
+) -> None:
+    if public_channel and hasattr(interaction.channel, "send"):
+        channel = cast("Messageable", interaction.channel)
+        try:
+            await channel.send(embed=embed)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                MISSING_CHANNEL_ACCESS_MESSAGE,
+                ephemeral=True,
+            )
+            return
+        await _clear_original_response(interaction)
+        return
+    await interaction.followup.send(embed=embed, ephemeral=False)
+
 
 async def send_outcome(
     interaction: discord.Interaction,
@@ -278,30 +302,15 @@ async def send_outcome(
 ) -> None:
     if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card is not None:
         embed = build_card_embed(outcome.card)
-        if public_channel and hasattr(interaction.channel, "send"):
-            channel = cast("Messageable", interaction.channel)
-            await channel.send(embed=embed)
-            await _clear_original_response(interaction)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=False)
+        await _send_public_embed(interaction, embed, public_channel=public_channel)
         return
     if outcome.kind is CommandOutcomeKind.PUBLIC_FAQ and outcome.card is not None:
         embed = build_faq_embed(outcome.card, outcome.faq_entries)
-        if public_channel and hasattr(interaction.channel, "send"):
-            channel = cast("Messageable", interaction.channel)
-            await channel.send(embed=embed)
-            await _clear_original_response(interaction)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=False)
+        await _send_public_embed(interaction, embed, public_channel=public_channel)
         return
     if outcome.kind is CommandOutcomeKind.PUBLIC_PRICE and outcome.card is not None:
         embed = build_price_embed(outcome.card, outcome.prices)
-        if public_channel and hasattr(interaction.channel, "send"):
-            channel = cast("Messageable", interaction.channel)
-            await channel.send(embed=embed)
-            await _clear_original_response(interaction)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=False)
+        await _send_public_embed(interaction, embed, public_channel=public_channel)
         return
     if outcome.kind is CommandOutcomeKind.EPHEMERAL_MESSAGE:
         await interaction.followup.send(outcome.message, ephemeral=True)
