@@ -48,6 +48,11 @@ MISSING_CHANNEL_ACCESS_MESSAGE = (
     "I couldn't post publicly in this channel. "
     "Check that the bot can view and send messages here."
 )
+BRACKET_FIRST_MATCH_NOTE = (
+    "`[[{query}]]` matched multiple cards; "
+    "showing the first result and may be incorrect."
+)
+
 VARIANT_CONTROLS_MESSAGE = (
     "Variant image controls\nOnly you can see this. Updates the public card embed."
 )
@@ -768,10 +773,23 @@ def create_bot(
                     continue
                 if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card:
                     await message.channel.send(embed=build_card_embed(outcome.card))
-                elif outcome.kind is CommandOutcomeKind.PICKER:
-                    await message.channel.send(
-                        f"`[[{query}]]` matched multiple cards. Use `/card` to choose."
-                    )
+                elif outcome.kind is CommandOutcomeKind.PICKER and outcome.choices:
+                    first_choice = outcome.choices[0]
+                    try:
+                        selected_outcome = await service.card(first_choice.card_number)
+                    except BotError as error:
+                        await message.channel.send(error.user_message)
+                        continue
+                    if (
+                        selected_outcome.kind is CommandOutcomeKind.PUBLIC_CARD
+                        and selected_outcome.card
+                    ):
+                        await message.channel.send(
+                            BRACKET_FIRST_MATCH_NOTE.format(query=query),
+                            embed=build_card_embed(selected_outcome.card),
+                        )
+                    elif selected_outcome.message:
+                        await message.channel.send(selected_outcome.message)
                 elif outcome.message:
                     await message.channel.send(outcome.message)
 

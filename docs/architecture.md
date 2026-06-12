@@ -27,8 +27,8 @@ Supported commands:
 
 Bracket message lookup is controlled by `OPTCG_ENABLE_BRACKET_MESSAGES`.
 When enabled, `[[card-name]]` detection uses the same resolver and embed pipeline
-as `/card`. Direct and single-result matches post publicly; ambiguous matches
-tell the user to use `/card` for selection.
+as `/card`. Direct and single-result matches post publicly; ambiguous matches post
+the first returned result with a caution note that it may be incorrect.
 
 ## Discord Interaction Rules
 
