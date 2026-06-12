@@ -81,16 +81,30 @@ async def test_ambiguous_query_returns_choices() -> None:
     assert client.queries_requested == ["luffy"]
 
 
-@pytest.mark.parametrize("query", ["Mosshead", "MOSS", "moss-head", "moss head"])
+@pytest.mark.parametrize(
+    ("query", "backend_query"),
+    [
+        ("Mosshead", "Zoro"),
+        ("MOSS", "Zoro"),
+        ("moss-head", "Zoro"),
+        ("moss head", "Zoro"),
+        ("curlybrows", "Sanji"),
+        ("curly-brows", "Sanji"),
+        ("curly brows", "Sanji"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_mosshead_aliases_resolve_as_zoro_queries(query: str) -> None:
+async def test_card_query_aliases_resolve_backend_queries(
+    query: str,
+    backend_query: str,
+) -> None:
     client = FakeClient()
 
     resolution = await resolve_card_query(client, query)
 
     assert resolution.kind is ResolutionKind.MULTIPLE
     assert resolution.card is None
-    assert client.queries_requested == ["Zoro"]
+    assert client.queries_requested == [backend_query]
 
 
 @pytest.mark.asyncio
