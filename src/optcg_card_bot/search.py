@@ -84,6 +84,14 @@ CARD_QUERY_ALIAS_GROUPS = (
         backend_query="Sanji",
         aliases=("curlybrows", "curly-brows", "curly brows"),
     ),
+    CardQueryAlias(
+        backend_query="Gum-Gum",
+        aliases=("dumdum", "dum-dum", "dum dum"),
+    ),
+    CardQueryAlias(
+        backend_query="mamaragan",
+        aliases=("mamaregan", "mama-regan", "mama regan"),
+    ),
 )
 
 

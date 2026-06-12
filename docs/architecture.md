@@ -60,9 +60,10 @@ bot-owned options, then pass the remaining query through unchanged.
 Important rules:
 
 - Bot-owned query aliases are whole-query, case-insensitive backend mappings.
-  They currently map `mosshead`, `moss`, `moss-head`, and `moss head` to `Zoro`,
-  plus `curlybrows`, `curly-brows`, and `curly brows` to `Sanji`, for card
-  resolution and `/search`.
+  They currently map `mosshead`, `moss`, `moss-head`, and `moss head` to `Zoro`;
+  `curlybrows`, `curly-brows`, and `curly brows` to `Sanji`; `dumdum`,
+  `dum-dum`, and `dum dum` to `Gum-Gum`; and `mamaregan`, `mama-regan`, and
+  `mama regan` to `mamaragan`, for card resolution and `/search`.
 
 - Bare words are broad Poneglyph free-text searches.
 - Quoted phrases, boolean operators, parentheses, negation, aliases, inline
