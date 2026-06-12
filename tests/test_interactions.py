@@ -25,14 +25,17 @@ FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
 
 
 class FakeFollowup:
-    def __init__(self) -> None:
+    def __init__(self, events: list[str] | None = None) -> None:
         self.sends: list[dict[str, object]] = []
+        self.events = events
 
     async def send(self, *args: object, **kwargs: object) -> object | None:
         send: dict[str, object] = {"args": args, **kwargs}
         if kwargs.get("wait") is True:
             send["message"] = FakeEditableMessage()
         self.sends.append(send)
+        if self.events is not None:
+            self.events.append("followup.send")
         return send.get("message")
 
 
@@ -46,12 +49,15 @@ class FakeEditableMessage:
 
 
 class FakeChannel:
-    def __init__(self) -> None:
+    def __init__(self, events: list[str] | None = None) -> None:
         self.sends: list[dict[str, object]] = []
+        self.events = events
 
     async def send(self, *args: object, **kwargs: object) -> FakeEditableMessage:
         message = FakeEditableMessage()
         self.sends.append({"args": args, **kwargs, "message": message})
+        if self.events is not None:
+            self.events.append("channel.send")
         return message
 
 
@@ -71,8 +77,9 @@ class FakeForbiddenChannel(FakeChannel):
 
 class FakeInteraction:
     def __init__(self) -> None:
-        self.followup = FakeFollowup()
-        self.channel = FakeChannel()
+        self.events: list[str] = []
+        self.followup = FakeFollowup(self.events)
+        self.channel = FakeChannel(self.events)
         self.response = FakeResponse()
         self.user = FakeUser()
         self.deleted_original_response = False
@@ -80,9 +87,11 @@ class FakeInteraction:
 
     async def delete_original_response(self) -> None:
         self.deleted_original_response = True
+        self.events.append("delete_original_response")
 
     async def edit_original_response(self, **kwargs: object) -> object | None:
         self.edits.append(kwargs)
+        self.events.append("edit_original_response")
         if "view" in kwargs:
             message = FakeEditableMessage()
             kwargs["message"] = message
@@ -92,13 +101,15 @@ class FakeInteraction:
 
 class FakeInteractionWithoutDelete:
     def __init__(self) -> None:
-        self.followup = FakeFollowup()
-        self.channel = FakeChannel()
+        self.events: list[str] = []
+        self.followup = FakeFollowup(self.events)
+        self.channel = FakeChannel(self.events)
         self.user = FakeUser()
         self.edits: list[dict[str, object]] = []
 
     async def edit_original_response(self, **kwargs: object) -> None:
         self.edits.append(kwargs)
+        self.events.append("edit_original_response")
 
 
 class FakeResponse:
@@ -570,11 +581,15 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     assert len(interaction.channel.sends) == 1
     assert "embed" in interaction.channel.sends[0]
     assert "view" not in interaction.channel.sends[0]
-    assert interaction.deleted_original_response is False
-    assert len(interaction.edits) == 1
-    assert "Only you can see this" in interaction.edits[0]["content"]
-    assert isinstance(interaction.edits[0]["view"], VariantImageView)
-    assert interaction.followup.sends == []
+    assert interaction.deleted_original_response is True
+    assert interaction.edits == []
+    assert interaction.events == [
+        "channel.send",
+        "delete_original_response",
+        "followup.send",
+    ]
+    assert "Only you can see this" in interaction.followup.sends[0]["args"][0]
+    assert isinstance(interaction.followup.sends[0]["view"], VariantImageView)
 
 
 @pytest.mark.asyncio
@@ -589,7 +604,7 @@ async def test_public_card_outcome_attaches_ephemeral_variant_image_controls() -
 
     assert len(interaction.channel.sends) == 1
     assert "view" not in interaction.channel.sends[0]
-    view = interaction.edits[0]["view"]
+    view = interaction.followup.sends[0]["view"]
     assert isinstance(view, VariantImageView)
     assert view.owner_id == interaction.user.id
 
@@ -614,7 +629,7 @@ async def test_public_card_outcome_uses_requested_variant_position() -> None:
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
     )
     assert "view" not in send
-    assert interaction.edits[0]["view"].variant_position == 1
+    assert interaction.followup.sends[0]["view"].variant_position == 1
 
 
 @pytest.mark.asyncio
@@ -649,9 +664,8 @@ async def test_card_picker_selection_posts_publicly_and_replaces_picker() -> Non
     assert service.queries == ["OP01-001"]
     assert len(interaction.channel.sends) == 1
     assert "embed" in interaction.channel.sends[0]
-    assert interaction.deleted_original_response is False
-    assert isinstance(interaction.edits[0]["view"], VariantImageView)
-    assert interaction.followup.sends == []
+    assert interaction.deleted_original_response is True
+    assert isinstance(interaction.followup.sends[0]["view"], VariantImageView)
 
 
 @pytest.mark.asyncio
@@ -687,7 +701,7 @@ async def test_card_picker_selection_preserves_requested_variant_position() -> N
     assert interaction.channel.sends[0]["embed"].image.url == (
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png"
     )
-    assert interaction.edits[0]["view"].variant_position == 2
+    assert interaction.followup.sends[0]["view"].variant_position == 2
 
 
 @pytest.mark.asyncio
@@ -742,9 +756,9 @@ async def test_public_outcome_edits_original_response_when_delete_unavailable() 
     await send_outcome(interaction, outcome, public_channel=True)
 
     assert len(interaction.channel.sends) == 1
-    assert "Only you can see this" in interaction.edits[0]["content"]
-    assert isinstance(interaction.edits[0]["view"], VariantImageView)
-    assert interaction.followup.sends == []
+    assert interaction.edits[0]["content"] == "Posted publicly."
+    assert "Only you can see this" in interaction.followup.sends[0]["args"][0]
+    assert isinstance(interaction.followup.sends[0]["view"], VariantImageView)
 
 
 @pytest.mark.asyncio
@@ -766,9 +780,8 @@ async def test_card_command_posts_direct_public_outcome_to_channel() -> None:
     assert interaction.response.defers == [{"ephemeral": True}]
     assert len(interaction.channel.sends) == 1
     assert "embed" in interaction.channel.sends[0]
-    assert interaction.deleted_original_response is False
-    assert isinstance(interaction.edits[0]["view"], VariantImageView)
-    assert interaction.followup.sends == []
+    assert interaction.deleted_original_response is True
+    assert isinstance(interaction.followup.sends[0]["view"], VariantImageView)
 
 
 @pytest.mark.asyncio
@@ -1352,7 +1365,7 @@ async def test_card_command_clamps_requested_variant_to_nearest_available() -> N
     assert interaction.channel.sends[0]["embed"].image.url == (
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png"
     )
-    assert interaction.edits[0]["view"].variant_position == 2
+    assert interaction.followup.sends[0]["view"].variant_position == 2
 
 
 @pytest.mark.asyncio
@@ -1373,7 +1386,7 @@ async def test_card_command_clamps_negative_variant_to_first_available() -> None
     assert interaction.channel.sends[0]["embed"].image.url == (
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/0/full.png"
     )
-    assert interaction.edits[0]["view"].variant_position == 0
+    assert interaction.followup.sends[0]["view"].variant_position == 0
 
 
 @pytest.mark.asyncio
@@ -1394,7 +1407,7 @@ async def test_card_command_resolves_named_variant_alias() -> None:
     assert interaction.channel.sends[0]["embed"].image.url == (
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
     )
-    assert interaction.edits[0]["view"].variant_position == 1
+    assert interaction.followup.sends[0]["view"].variant_position == 1
 
 
 @pytest.mark.asyncio

@@ -46,8 +46,8 @@ tell the user to use `/card` for selection.
   variant `0`.
 - Pickers and paged controls are scoped to the user who invoked the command.
 - Selected picker cards post through the same public channel path as direct
-  matches, then replace the ephemeral picker with owner-only variant controls
-  when the selected card has alternate images.
+  matches, then remove the original ephemeral response and send owner-only
+  variant controls after the public card post when the card has alternate images.
 - Expired or invalid interactions should fail with short, actionable messages.
 - Missing images, missing prices, and missing optional card fields must degrade
   gracefully instead of blocking the response.
@@ -151,8 +151,9 @@ Variant output should stay compact: show variant indexes, labels, products, and
 best available market value when present so users can distinguish standard,
 alternate-art, promo, and product-specific printings. Public card embeds keep
 variant controls out of the public component row; cards with multiple images
-provide owner-only ephemeral controls that cycle the public embed's primary
-image, footer context, and market value without changing the selected card.
+provide owner-only ephemeral controls after the public card post. Controls cycle
+the public embed's primary image, footer context, and market value without
+changing the selected card.
 
 ## Deployment Shape
 
