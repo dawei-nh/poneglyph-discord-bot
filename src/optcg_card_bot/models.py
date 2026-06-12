@@ -166,16 +166,86 @@ class SearchParams(StrictModel):
     lang: str = "en"
 
 
+VariantRequest = int | str | None
+
+_VARIANT_QUERY_ALIASES = {
+    "alt": ("alternate", "alternate art", "alt art", "parallel"),
+    "sp": ("sp", "special", "special rare"),
+    "manga": ("manga", "manga rare"),
+}
+
+
+def resolve_variant_position(
+    card: CardSummary,
+    variant_position: VariantRequest = 0,
+) -> int:
+    if isinstance(variant_position, int):
+        return clamp_variant_position(card, variant_position)
+    if variant_position is None:
+        return 0
+
+    raw_query = variant_position.strip()
+    if not raw_query:
+        return 0
+    try:
+        return clamp_variant_position(card, int(raw_query))
+    except ValueError:
+        pass
+
+    query = _normalize_variant_query(raw_query)
+    if not query:
+        return 0
+    queries = {query, *_VARIANT_QUERY_ALIASES.get(query, ())}
+
+    for position, variant in enumerate(card.variants):
+        for term in _variant_search_terms(variant):
+            if term in queries or queries.intersection(term.split()):
+                return position
+    return 0
+
+
+def _variant_search_terms(variant: CardVariant) -> tuple[str, ...]:
+    values = (
+        variant.name,
+        variant.label,
+        variant.product.name,
+        variant.product.slug,
+        variant.product.set_code,
+        str(variant.index),
+    )
+    return tuple(
+        normalized
+        for value in values
+        if value and (normalized := _normalize_variant_query(value))
+    )
+
+
+def _normalize_variant_query(value: str) -> str:
+    parts: list[str] = []
+    previous_was_space = True
+    for character in value.lower():
+        if character.isalnum():
+            parts.append(character)
+            previous_was_space = False
+        elif not previous_was_space:
+            parts.append(" ")
+            previous_was_space = True
+    return "".join(parts).strip()
+
+
 def clamp_variant_position(card: CardSummary, variant_position: int) -> int:
     if not card.variants:
         return 0
     return max(0, min(variant_position, len(card.variants) - 1))
 
 
-def variant_at_position(card: CardSummary, variant_position: int) -> CardVariant | None:
+def variant_at_position(
+    card: CardSummary,
+    variant_position: VariantRequest = 0,
+) -> CardVariant | None:
     if not card.variants:
         return None
-    return card.variants[clamp_variant_position(card, variant_position)]
+    return card.variants[resolve_variant_position(card, variant_position)]
 
 
 def best_variant(card: CardSummary) -> CardVariant | None:
