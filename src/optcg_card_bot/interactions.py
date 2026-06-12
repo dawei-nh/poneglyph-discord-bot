@@ -458,10 +458,11 @@ async def _send_public_embed(
             await _clear_original_response(interaction)
             return
         view.bind_public_message(cast("EditableMessage | None", sent_message))
+        await _clear_original_response(interaction)
         await _send_variant_controls(
             interaction,
             view,
-            use_original_response=True,
+            use_original_response=False,
         )
         return
     if view is None:
