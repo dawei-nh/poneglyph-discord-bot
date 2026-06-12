@@ -10,7 +10,7 @@ from discord.ext import commands
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind, CommandService
 from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
 from optcg_card_bot.errors import BotError
-from optcg_card_bot.models import CardDetail
+from optcg_card_bot.models import CardDetail, clamp_variant_position
 from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
 MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
@@ -94,9 +94,7 @@ class VariantImageView(discord.ui.View):
         super().__init__(timeout=180)
         self.owner_id = owner_id
         self.card = card
-        self.variant_position = (
-            variant_position % len(card.variants) if card.variants else 0
-        )
+        self.variant_position = clamp_variant_position(card, variant_position)
         self._message: EditableMessage | None = None
         self.add_item(VariantImageButton(label="Previous", variant_delta=-1))
         self.add_item(VariantImageButton(label="Next", variant_delta=1))
@@ -185,7 +183,12 @@ class CardSelect(discord.ui.Select[discord.ui.View]):
         except BotError as error:
             await send_error(interaction, error)
             return
-        await send_outcome(interaction, outcome, public_channel=True)
+        await send_outcome(
+            interaction,
+            outcome,
+            public_channel=True,
+            variant_position=view.variant_position,
+        )
 
 
 class CardSelectView(discord.ui.View):
@@ -198,6 +201,7 @@ class CardSelectView(discord.ui.View):
         choices: tuple[CardChoice, ...],
         service: CommandService | None = None,
         price_days: int = 30,
+        variant_position: int = 0,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
@@ -205,6 +209,7 @@ class CardSelectView(discord.ui.View):
         self.action = action
         self.service = service
         self.price_days = price_days
+        self.variant_position = variant_position
         self._message: EditableMessage | None = None
         self.add_item(CardSelect(choices))
 
@@ -257,6 +262,7 @@ class SearchResultsView(CardSelectView):
         service: CommandService | None = None,
         sort: str | None = None,
         order: str | None = None,
+        variant_position: int = 0,
     ) -> None:
         super().__init__(
             owner_id=owner_id,
@@ -264,6 +270,7 @@ class SearchResultsView(CardSelectView):
             action="card",
             choices=choices,
             service=service,
+            variant_position=variant_position,
         )
         self.page = page
         self.total = total
@@ -331,6 +338,7 @@ class SearchResultsView(CardSelectView):
             service=self.service,
             sort=self.sort,
             order=self.order,
+            variant_position=self.variant_position,
         )
         message = await interaction.edit_original_response(
             content=outcome.message,
@@ -358,10 +366,15 @@ def _variant_image_view(
     card: CardDetail,
     *,
     owner_id: int,
+    variant_position: int,
 ) -> VariantImageView | None:
     if len(card.variants) <= 1:
         return None
-    return VariantImageView(owner_id=owner_id, card=card)
+    return VariantImageView(
+        owner_id=owner_id,
+        card=card,
+        variant_position=variant_position,
+    )
 
 
 async def _send_public_embed(
@@ -404,14 +417,19 @@ async def send_outcome(
     outcome: CommandOutcome,
     *,
     public_channel: bool = False,
+    variant_position: int = 0,
 ) -> None:
     if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card is not None:
-        embed = build_card_embed(outcome.card)
+        embed = build_card_embed(outcome.card, variant_position=variant_position)
         await _send_public_embed(
             interaction,
             embed,
             public_channel=public_channel,
-            view=_variant_image_view(outcome.card, owner_id=interaction.user.id),
+            view=_variant_image_view(
+                outcome.card,
+                owner_id=interaction.user.id,
+                variant_position=variant_position,
+            ),
         )
         return
     if outcome.kind is CommandOutcomeKind.PUBLIC_FAQ and outcome.card is not None:
@@ -499,9 +517,16 @@ def create_bot(
         return await autocomplete_card_choices(service, current)
 
     @bot.tree.command(name="card", description="Search and post a Poneglyph card")
-    @app_commands.describe(query="Poneglyph query or card number")
+    @app_commands.describe(
+        query="Poneglyph query or card number",
+        variant="Variant index to show first; out-of-range chooses closest",
+    )
     @app_commands.autocomplete(query=autocomplete_cards)
-    async def card(interaction: discord.Interaction, query: str) -> None:
+    async def card(
+        interaction: discord.Interaction,
+        query: str,
+        variant: app_commands.Range[int, 0] = 0,
+    ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
         try:
@@ -519,16 +544,23 @@ def create_bot(
                     action="card",
                     choices=outcome.choices,
                     service=service,
+                    variant_position=variant,
                 ),
             )
             return
-        await send_outcome(interaction, outcome, public_channel=True)
+        await send_outcome(
+            interaction,
+            outcome,
+            public_channel=True,
+            variant_position=variant,
+        )
 
     @bot.tree.command(name="search", description="Browse Poneglyph search results")
     @app_commands.describe(
         query="Poneglyph query",
         sort="Optional Poneglyph sort field",
         order="Optional Poneglyph sort order",
+        variant="Variant index to show first; out-of-range chooses closest",
     )
     @app_commands.choices(sort=SEARCH_SORT_CHOICES, order=SEARCH_ORDER_CHOICES)
     @app_commands.autocomplete(query=autocomplete_cards)
@@ -537,6 +569,7 @@ def create_bot(
         query: str,
         sort: str | None = None,
         order: str | None = None,
+        variant: app_commands.Range[int, 0] = 0,
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -559,15 +592,23 @@ def create_bot(
                     service=service,
                     sort=sort,
                     order=order,
+                    variant_position=variant,
                 ),
             )
             return
-        await send_outcome(interaction, outcome)
+        await send_outcome(interaction, outcome, variant_position=variant)
 
     @bot.tree.command(name="random", description="Post a random Poneglyph card")
-    @app_commands.describe(query="Optional Poneglyph query or simple random filters")
+    @app_commands.describe(
+        query="Optional Poneglyph query or simple random filters",
+        variant="Variant index to show first; out-of-range chooses closest",
+    )
     @app_commands.autocomplete(query=autocomplete_cards)
-    async def random_card(interaction: discord.Interaction, query: str = "") -> None:
+    async def random_card(
+        interaction: discord.Interaction,
+        query: str = "",
+        variant: app_commands.Range[int, 0] = 0,
+    ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=False)
         try:
@@ -575,7 +616,7 @@ def create_bot(
         except BotError as error:
             await send_error(interaction, error)
             return
-        await send_outcome(interaction, outcome)
+        await send_outcome(interaction, outcome, variant_position=variant)
 
     @bot.tree.command(name="faq", description="Post official FAQ for a card")
     @app_commands.describe(card="Card number or Poneglyph query")

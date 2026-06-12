@@ -59,6 +59,18 @@ def test_card_embed_can_render_non_default_variant_image() -> None:
     assert market.value == "$558.38"
 
 
+def test_card_embed_clamps_requested_variant_to_available_range() -> None:
+    high_embed = build_card_embed(load_card(), variant_position=99)
+    low_embed = build_card_embed(load_card(), variant_position=-1)
+
+    assert high_embed.image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png"
+    )
+    assert low_embed.image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/0/full.png"
+    )
+
+
 def test_card_embed_lists_variant_context() -> None:
     embed = build_card_embed(load_card())
 

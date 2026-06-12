@@ -39,6 +39,9 @@ tell the user to use `/card` for selection.
   exactly-one search result is unambiguous.
 - `/search` remains private-first even when a page contains one result because
   its intent is browsing.
+- `/card`, `/search`, and `/random` accept an optional `variant` index for the
+  initial card image. Missing values use variant `0`; out-of-range values clamp
+  to the nearest available variant.
 - Pickers and paged controls are scoped to the user who invoked the command.
 - Selected picker cards post through the same public channel path as direct
   matches, then clear the ephemeral picker when Discord allows the public post.
