@@ -47,6 +47,24 @@ def test_readme_links_to_docker_docs() -> None:
     assert "[Docker Deployment](docs/deployment/docker.md)" in readme
 
 
+def test_readme_links_to_discord_portal_docs() -> None:
+    readme = (ROOT / "README.md").read_text()
+
+    assert "[Discord Developer Portal Setup](docs/deployment/discord.md)" in readme
+
+
+def test_discord_portal_docs_cover_install_permissions_and_intents() -> None:
+    docs = (ROOT / "docs" / "deployment" / "discord.md").read_text()
+
+    assert "applications.commands" in docs
+    assert "permissions=19456" in docs
+    assert "View Channels" in docs
+    assert "Send Messages" in docs
+    assert "Embed Links" in docs
+    assert "Message Content Intent" in docs
+    assert "OPTCG_ENABLE_BRACKET_MESSAGES=true" in docs
+
+
 def test_readme_lists_price_command() -> None:
     readme = (ROOT / "README.md").read_text()
 

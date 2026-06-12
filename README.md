@@ -19,6 +19,9 @@ embeds.
 See [Docker Deployment](docs/deployment/docker.md) for local image builds,
 Compose secrets, and Docker Hub publish behavior.
 
+See [Discord Developer Portal Setup](docs/deployment/discord.md) for creating the
+Discord application, choosing bot permissions, and inviting the bot to a server.
+
 ## Architecture
 
 See [Architecture Reference](docs/architecture.md) for command behavior,
