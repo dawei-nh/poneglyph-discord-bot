@@ -2,6 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import discord
 import pytest
 
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind
@@ -49,6 +50,20 @@ class FakeChannel:
 
     async def send(self, *args: object, **kwargs: object) -> None:
         self.sends.append({"args": args, **kwargs})
+
+
+class FakeForbiddenResponse:
+    status = 403
+    reason = "Forbidden"
+
+
+class FakeForbiddenChannel(FakeChannel):
+    async def send(self, *args: object, **kwargs: object) -> None:
+        self.sends.append({"args": args, **kwargs})
+        raise discord.Forbidden(
+            FakeForbiddenResponse(),
+            {"code": 50001, "message": "Missing Access"},
+        )
 
 
 class FakeInteraction:
@@ -483,6 +498,30 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     assert interaction.deleted_original_response is True
     assert interaction.edits == []
     assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_public_outcome_reports_missing_channel_access_ephemerally() -> None:
+    interaction = FakeInteraction()
+    interaction.channel = FakeForbiddenChannel()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    assert len(interaction.channel.sends) == 1
+    assert interaction.deleted_original_response is False
+    assert interaction.followup.sends == [
+        {
+            "args": (
+                "I couldn't post publicly in this channel. "
+                "Check that the bot can view and send messages here.",
+            ),
+            "ephemeral": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio
