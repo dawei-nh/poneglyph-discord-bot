@@ -209,6 +209,18 @@ class FakeService:
         return self.outcome
 
 
+class SequencedCardService(FakeService):
+    def __init__(self, *outcomes: CommandOutcome) -> None:
+        super().__init__()
+        self.outcomes = list(outcomes)
+
+    async def card(self, query: str) -> CommandOutcome:
+        self.queries.append(query)
+        if not self.outcomes:
+            raise AssertionError(f"Unexpected card lookup: {query}")
+        return self.outcomes.pop(0)
+
+
 class BlockingSearchService(FakeService):
     def __init__(self, outcome: CommandOutcome) -> None:
         super().__init__(outcome)
@@ -1571,6 +1583,49 @@ async def test_bracket_listener_sends_public_card_embed() -> None:
     assert service.queries == ["OP01-001"]
     assert len(message.channel.sends) == 1
     assert "embed" in message.channel.sends[0]
+
+
+@pytest.mark.asyncio
+async def test_bracket_listener_posts_first_ambiguous_card_with_caution() -> None:
+    service = SequencedCardService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+                CardChoice(
+                    card_number="OP01-025",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Character",
+                    color=("Red",),
+                ),
+            ),
+        ),
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        ),
+    )
+    bot = create_bot(command_service=service, enable_bracket_messages=True)
+    listener = bot.extra_events["on_message"][0]
+    message = FakeMessage(content="[[zoro]]")
+
+    await listener(message)
+
+    assert service.queries == ["zoro", "OP01-001"]
+    assert len(message.channel.sends) == 1
+    send = message.channel.sends[0]
+    assert send["args"] == (
+        "`[[zoro]]` matched multiple cards; "
+        "showing the first result and may be incorrect.",
+    )
+    assert "embed" in send
 
 
 @pytest.mark.asyncio
