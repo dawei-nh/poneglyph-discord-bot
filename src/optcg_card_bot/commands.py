@@ -7,7 +7,12 @@ from typing import Protocol
 
 from optcg_card_bot.errors import NoSearchResultsError
 from optcg_card_bot.models import CardDetail, FAQEntry, PricePoint, SearchResponse
-from optcg_card_bot.search import CardChoice, ResolutionKind, resolve_card_query
+from optcg_card_bot.search import (
+    CardChoice,
+    ResolutionKind,
+    resolve_card_query,
+    rewrite_card_query_alias,
+)
 
 
 class CommandClient(Protocol):
@@ -113,7 +118,7 @@ class CommandService:
         order: str | None = None,
     ) -> CommandOutcome:
         response = await self._client.search_cards(
-            query,
+            rewrite_card_query_alias(query),
             page=page,
             limit=10,
             sort=sort,
