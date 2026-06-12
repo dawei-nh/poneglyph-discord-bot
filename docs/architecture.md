@@ -39,7 +39,12 @@ tell the user to use `/card` for selection.
   exactly-one search result is unambiguous.
 - `/search` remains private-first even when a page contains one result because
   its intent is browsing.
+- `/card`, `/search`, and `/random` accept an optional `variant` index for the
+  initial card image. Missing values use variant `0`; out-of-range values clamp
+  to the nearest available variant.
 - Pickers and paged controls are scoped to the user who invoked the command.
+- Selected picker cards post through the same public channel path as direct
+  matches, then clear the ephemeral picker when Discord allows the public post.
 - Expired or invalid interactions should fail with short, actionable messages.
 - Missing images, missing prices, and missing optional card fields must degrade
   gracefully instead of blocking the response.
@@ -137,7 +142,9 @@ clear no-data message.
 
 Variant output should stay compact: show variant indexes, labels, products, and
 best available market value when present so users can distinguish standard,
-alternate-art, promo, and product-specific printings without a separate command.
+alternate-art, promo, and product-specific printings. Card embeds with multiple
+variants include owner-scoped controls that cycle the primary image, footer
+context, and market value without changing the selected card.
 
 ## Deployment Shape
 

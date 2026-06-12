@@ -10,6 +10,7 @@ from optcg_card_bot.errors import PoneglyphRateLimitError
 from optcg_card_bot.interactions import (
     CardSelectView,
     SearchResultsView,
+    VariantImageView,
     autocomplete_card_choices,
     build_choice_options,
     create_bot,
@@ -91,6 +92,7 @@ class FakeInteractionWithoutDelete:
     def __init__(self) -> None:
         self.followup = FakeFollowup()
         self.channel = FakeChannel()
+        self.user = FakeUser()
         self.edits: list[dict[str, object]] = []
 
     async def edit_original_response(self, **kwargs: object) -> None:
@@ -187,6 +189,12 @@ class FakeService:
             raise PoneglyphRateLimitError
         return self.outcome
 
+    async def random(self, query: str) -> CommandOutcome:
+        self.queries.append(query)
+        if self.outcome is None:
+            raise PoneglyphRateLimitError
+        return self.outcome
+
 
 class BlockingSearchService(FakeService):
     def __init__(self, outcome: CommandOutcome) -> None:
@@ -277,6 +285,51 @@ def test_select_view_tracks_owner_and_query() -> None:
     assert view.timeout == 180
 
 
+def test_variant_image_view_tracks_owner_and_card_variants() -> None:
+    view = VariantImageView(owner_id=123, card=load_card())
+
+    assert view.owner_id == 123
+    assert view.variant_position == 0
+    assert len(view.children) == 2
+
+
+@pytest.mark.asyncio
+async def test_variant_image_view_next_button_updates_public_embed() -> None:
+    interaction = FakeInteraction()
+    view = VariantImageView(owner_id=123, card=load_card())
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert view.variant_position == 1
+    assert interaction.response.edits[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
+    )
+    assert interaction.response.edits[0]["view"] is view
+
+
+@pytest.mark.asyncio
+async def test_variant_image_view_only_allows_original_user() -> None:
+    interaction = FakeInteraction()
+    interaction.user = FakeUser(user_id=999)
+    view = VariantImageView(owner_id=123, card=load_card())
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    assert view.variant_position == 0
+    assert interaction.response.messages == [
+        {
+            "args": ("Only the command user can cycle variants.",),
+            "ephemeral": True,
+        }
+    ]
+
+
 @pytest.mark.asyncio
 async def test_select_view_timeout_clears_service_and_disables_components() -> None:
     service = FakeService()
@@ -357,6 +410,21 @@ def test_search_results_view_has_navigation_buttons() -> None:
 
     assert last_page_buttons["Previous"].disabled is False
     assert last_page_buttons["Next"].disabled is True
+
+
+def test_card_search_and_random_commands_accept_variant_defaults() -> None:
+    bot = create_bot(command_service=None)
+
+    expected_params = {
+        "card": {"query", "variant"},
+        "search": {"query", "sort", "order", "variant"},
+        "random": {"query", "variant"},
+    }
+
+    for command_name, parameter_names in expected_params.items():
+        command = bot.tree.get_command(command_name)
+        assert command is not None
+        assert {param.name for param in command.parameters} == parameter_names
 
 
 @pytest.mark.asyncio
@@ -498,6 +566,116 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     assert interaction.deleted_original_response is True
     assert interaction.edits == []
     assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_public_card_outcome_attaches_variant_image_controls() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    assert len(interaction.channel.sends) == 1
+    view = interaction.channel.sends[0]["view"]
+    assert isinstance(view, VariantImageView)
+    assert view.owner_id == interaction.user.id
+
+
+@pytest.mark.asyncio
+async def test_public_card_outcome_uses_requested_variant_position() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(
+        interaction,
+        outcome,
+        public_channel=True,
+        variant_position=1,
+    )
+
+    send = interaction.channel.sends[0]
+    assert send["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
+    )
+    assert send["view"].variant_position == 1
+
+
+@pytest.mark.asyncio
+async def test_card_picker_selection_posts_publicly_and_clears_picker() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    view = CardSelectView(
+        owner_id=123,
+        source_query="zoro",
+        action="card",
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+    )
+    select = view.children[0]
+    select._values = ["OP01-001"]
+
+    await select.callback(interaction)
+
+    assert service.queries == ["OP01-001"]
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
+    assert interaction.followup.sends == []
+
+
+@pytest.mark.asyncio
+async def test_card_picker_selection_preserves_requested_variant_position() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    view = CardSelectView(
+        owner_id=123,
+        source_query="zoro",
+        action="card",
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+        variant_position=2,
+    )
+    select = view.children[0]
+    select._values = ["OP01-001"]
+
+    await select.callback(interaction)
+
+    assert interaction.channel.sends[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png"
+    )
+    assert interaction.channel.sends[0]["view"].variant_position == 2
 
 
 @pytest.mark.asyncio
@@ -698,6 +876,52 @@ async def test_search_command_sends_search_results_view() -> None:
     )
     assert isinstance(interaction.followup.sends[0]["view"], SearchResultsView)
     assert interaction.followup.sends[0]["ephemeral"] is True
+
+
+@pytest.mark.asyncio
+async def test_search_picker_selection_preserves_requested_variant_position() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PICKER,
+            message="Search results | Page 1 | 30 total",
+            choices=(
+                CardChoice(
+                    card_number="OP01-001",
+                    name="Roronoa Zoro",
+                    set_code="OP01",
+                    card_type="Leader",
+                    color=("Red",),
+                ),
+            ),
+            source_query="type:leader",
+            page=1,
+            total=30,
+            has_more=True,
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("search")
+    assert command is not None
+
+    await command.callback(interaction, "type:leader", "market_price", "desc", 2)
+    view = interaction.followup.sends[0]["view"]
+    assert isinstance(view, SearchResultsView)
+    assert view.variant_position == 2
+
+    selection_interaction = FakeInteraction()
+    service.outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+    select = view.children[0]
+    select._values = ["OP01-001"]
+
+    await select.callback(selection_interaction)
+
+    assert selection_interaction.channel.sends[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png"
+    )
 
 
 def test_search_command_registers_sort_and_order_choices() -> None:
@@ -1097,6 +1321,70 @@ async def test_price_command_posts_public_price_outcome_to_channel() -> None:
 
 
 @pytest.mark.asyncio
+async def test_card_command_clamps_requested_variant_to_nearest_available() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("card")
+    assert command is not None
+
+    await command.callback(interaction, "OP01-001", 99)
+
+    assert interaction.channel.sends[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/2/full.png"
+    )
+    assert interaction.channel.sends[0]["view"].variant_position == 2
+
+
+@pytest.mark.asyncio
+async def test_card_command_clamps_negative_variant_to_first_available() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("card")
+    assert command is not None
+
+    await command.callback(interaction, "OP01-001", -5)
+
+    assert interaction.channel.sends[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/0/full.png"
+    )
+    assert interaction.channel.sends[0]["view"].variant_position == 0
+
+
+@pytest.mark.asyncio
+async def test_random_command_uses_requested_variant_position() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("random")
+    assert command is not None
+
+    await command.callback(interaction, "", 1)
+
+    assert service.queries == [""]
+    assert interaction.followup.sends[0]["embed"].image.url == (
+        "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
+    )
+    assert interaction.followup.sends[0]["view"].variant_position == 1
+
+
+@pytest.mark.asyncio
 async def test_price_command_ambiguous_uses_price_picker_action() -> None:
     interaction = FakeInteraction()
     service = FakeService(
@@ -1159,8 +1447,10 @@ async def test_price_picker_selection_preserves_requested_days() -> None:
     await select.callback(interaction)
 
     assert service.price_calls == [("OP01-001", 7)]
-    assert len(interaction.followup.sends) == 1
-    assert "embed" in interaction.followup.sends[0]
+    assert len(interaction.channel.sends) == 1
+    assert "embed" in interaction.channel.sends[0]
+    assert interaction.deleted_original_response is True
+    assert interaction.followup.sends == []
 
 
 @pytest.mark.asyncio

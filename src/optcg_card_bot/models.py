@@ -166,8 +166,20 @@ class SearchParams(StrictModel):
     lang: str = "en"
 
 
+def clamp_variant_position(card: CardSummary, variant_position: int) -> int:
+    if not card.variants:
+        return 0
+    return max(0, min(variant_position, len(card.variants) - 1))
+
+
+def variant_at_position(card: CardSummary, variant_position: int) -> CardVariant | None:
+    if not card.variants:
+        return None
+    return card.variants[clamp_variant_position(card, variant_position)]
+
+
 def best_variant(card: CardSummary) -> CardVariant | None:
-    return card.variants[0] if card.variants else None
+    return variant_at_position(card, 0)
 
 
 def best_image_url(variant: CardVariant | None) -> str | None:
