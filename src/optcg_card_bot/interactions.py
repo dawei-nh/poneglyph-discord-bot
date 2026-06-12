@@ -10,7 +10,11 @@ from discord.ext import commands
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind, CommandService
 from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
 from optcg_card_bot.errors import BotError
-from optcg_card_bot.models import CardDetail, clamp_variant_position
+from optcg_card_bot.models import (
+    CardDetail,
+    VariantRequest,
+    resolve_variant_position,
+)
 from optcg_card_bot.search import CardChoice, extract_bracket_queries
 
 MAX_BRACKET_LOOKUPS_PER_MESSAGE = 3
@@ -43,6 +47,9 @@ PICKER_EXPIRED_MESSAGE = "This picker expired. Run the command again."
 MISSING_CHANNEL_ACCESS_MESSAGE = (
     "I couldn't post publicly in this channel. "
     "Check that the bot can view and send messages here."
+)
+VARIANT_CONTROLS_MESSAGE = (
+    "Variant image controls\nOnly you can see this. Updates the public card embed."
 )
 
 
@@ -89,18 +96,22 @@ class VariantImageView(discord.ui.View):
         *,
         owner_id: int,
         card: CardDetail,
-        variant_position: int = 0,
+        variant_position: VariantRequest = 0,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
         self.card = card
-        self.variant_position = clamp_variant_position(card, variant_position)
-        self._message: EditableMessage | None = None
+        self.variant_position = resolve_variant_position(card, variant_position)
+        self._public_message: EditableMessage | None = None
+        self._control_message: EditableMessage | None = None
         self.add_item(VariantImageButton(label="Previous", variant_delta=-1))
         self.add_item(VariantImageButton(label="Next", variant_delta=1))
 
-    def bind_message(self, message: EditableMessage | None) -> None:
-        self._message = message
+    def bind_public_message(self, message: EditableMessage | None) -> None:
+        self._public_message = message
+
+    def bind_control_message(self, message: EditableMessage | None) -> None:
+        self._control_message = message
 
     async def change_variant(
         self,
@@ -119,15 +130,31 @@ class VariantImageView(discord.ui.View):
                 ephemeral=True,
             )
             return
+        if self._public_message is None:
+            await interaction.response.send_message(
+                "Variant controls expired.",
+                ephemeral=True,
+            )
+            return
 
         self.variant_position = (self.variant_position + variant_delta) % len(
             self.card.variants
         )
+        try:
+            await self._public_message.edit(
+                embed=build_card_embed(
+                    self.card,
+                    variant_position=self.variant_position,
+                )
+            )
+        except discord.HTTPException:
+            await interaction.response.send_message(
+                "I couldn't update the public card message.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.edit_message(
-            embed=build_card_embed(
-                self.card,
-                variant_position=self.variant_position,
-            ),
+            content=_variant_controls_message(self.card, self.variant_position),
             view=self,
         )
 
@@ -135,10 +162,16 @@ class VariantImageView(discord.ui.View):
         for item in self.children:
             if isinstance(item, discord.ui.Button | discord.ui.Select):
                 item.disabled = True
-        if self._message is None:
+        if self._control_message is None:
             return
         try:
-            await self._message.edit(view=self)
+            await self._control_message.edit(
+                content=(
+                    f"{_variant_controls_message(self.card, self.variant_position)}\n"
+                    "Controls expired."
+                ),
+                view=self,
+            )
         except discord.HTTPException:
             return
 
@@ -201,7 +234,7 @@ class CardSelectView(discord.ui.View):
         choices: tuple[CardChoice, ...],
         service: CommandService | None = None,
         price_days: int = 30,
-        variant_position: int = 0,
+        variant_position: VariantRequest = 0,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
@@ -262,7 +295,7 @@ class SearchResultsView(CardSelectView):
         service: CommandService | None = None,
         sort: str | None = None,
         order: str | None = None,
-        variant_position: int = 0,
+        variant_position: VariantRequest = 0,
     ) -> None:
         super().__init__(
             owner_id=owner_id,
@@ -366,7 +399,7 @@ def _variant_image_view(
     card: CardDetail,
     *,
     owner_id: int,
-    variant_position: int,
+    variant_position: VariantRequest,
 ) -> VariantImageView | None:
     if len(card.variants) <= 1:
         return None
@@ -375,6 +408,33 @@ def _variant_image_view(
         card=card,
         variant_position=variant_position,
     )
+
+
+def _variant_controls_message(card: CardDetail, variant_position: int) -> str:
+    return (
+        f"{VARIANT_CONTROLS_MESSAGE}\n"
+        f"Current: Variant {variant_position + 1}/{len(card.variants)}"
+    )
+
+
+async def _send_variant_controls(
+    interaction: discord.Interaction,
+    view: VariantImageView,
+    *,
+    use_original_response: bool,
+) -> None:
+    content = _variant_controls_message(view.card, view.variant_position)
+    if use_original_response and hasattr(interaction, "edit_original_response"):
+        message = await interaction.edit_original_response(content=content, view=view)
+        view.bind_control_message(cast("EditableMessage | None", message))
+        return
+    sent_message = await interaction.followup.send(
+        content,
+        view=view,
+        ephemeral=True,
+        wait=True,
+    )
+    view.bind_control_message(cast("EditableMessage | None", sent_message))
 
 
 async def _send_public_embed(
@@ -387,29 +447,37 @@ async def _send_public_embed(
     if public_channel and hasattr(interaction.channel, "send"):
         channel = cast("Messageable", interaction.channel)
         try:
-            if view is None:
-                await channel.send(embed=embed)
-            else:
-                sent_message = await channel.send(embed=embed, view=view)
-                view.bind_message(cast("EditableMessage | None", sent_message))
+            sent_message = await channel.send(embed=embed)
         except discord.Forbidden:
             await interaction.followup.send(
                 MISSING_CHANNEL_ACCESS_MESSAGE,
                 ephemeral=True,
             )
             return
-        await _clear_original_response(interaction)
+        if view is None:
+            await _clear_original_response(interaction)
+            return
+        view.bind_public_message(cast("EditableMessage | None", sent_message))
+        await _send_variant_controls(
+            interaction,
+            view,
+            use_original_response=True,
+        )
         return
     if view is None:
         await interaction.followup.send(embed=embed, ephemeral=False)
         return
     sent_message = await interaction.followup.send(
         embed=embed,
-        view=view,
         ephemeral=False,
         wait=True,
     )
-    view.bind_message(cast("EditableMessage | None", sent_message))
+    view.bind_public_message(cast("EditableMessage | None", sent_message))
+    await _send_variant_controls(
+        interaction,
+        view,
+        use_original_response=False,
+    )
 
 
 async def send_outcome(
@@ -417,7 +485,7 @@ async def send_outcome(
     outcome: CommandOutcome,
     *,
     public_channel: bool = False,
-    variant_position: int = 0,
+    variant_position: VariantRequest = 0,
 ) -> None:
     if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card is not None:
         embed = build_card_embed(outcome.card, variant_position=variant_position)
@@ -519,13 +587,13 @@ def create_bot(
     @bot.tree.command(name="card", description="Search and post a Poneglyph card")
     @app_commands.describe(
         query="Poneglyph query or card number",
-        variant="Variant index to show first; out-of-range chooses closest",
+        variant="Variant index or name to show first; examples: 0, alt, sp, manga",
     )
     @app_commands.autocomplete(query=autocomplete_cards)
     async def card(
         interaction: discord.Interaction,
         query: str,
-        variant: app_commands.Range[int, 0] = 0,
+        variant: str = "",
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -560,7 +628,7 @@ def create_bot(
         query="Poneglyph query",
         sort="Optional Poneglyph sort field",
         order="Optional Poneglyph sort order",
-        variant="Variant index to show first; out-of-range chooses closest",
+        variant="Variant index or name to show first; examples: 0, alt, sp, manga",
     )
     @app_commands.choices(sort=SEARCH_SORT_CHOICES, order=SEARCH_ORDER_CHOICES)
     @app_commands.autocomplete(query=autocomplete_cards)
@@ -569,7 +637,7 @@ def create_bot(
         query: str,
         sort: str | None = None,
         order: str | None = None,
-        variant: app_commands.Range[int, 0] = 0,
+        variant: str = "",
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -601,13 +669,13 @@ def create_bot(
     @bot.tree.command(name="random", description="Post a random Poneglyph card")
     @app_commands.describe(
         query="Optional Poneglyph query or simple random filters",
-        variant="Variant index to show first; out-of-range chooses closest",
+        variant="Variant index or name to show first; examples: 0, alt, sp, manga",
     )
     @app_commands.autocomplete(query=autocomplete_cards)
     async def random_card(
         interaction: discord.Interaction,
         query: str = "",
-        variant: app_commands.Range[int, 0] = 0,
+        variant: str = "",
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=False)

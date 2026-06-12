@@ -7,9 +7,11 @@ from optcg_card_bot.models import (
     CardVariant,
     FAQEntry,
     PricePoint,
+    VariantRequest,
     best_image_url,
     best_price,
     poneglyph_card_url,
+    resolve_variant_position,
     variant_at_position,
 )
 
@@ -23,8 +25,13 @@ EMBED_TOTAL_TEXT_LIMIT = 6000
 POWERED_BY = "Powered by Poneglyph"
 
 
-def build_card_embed(card: CardDetail, *, variant_position: int = 0) -> discord.Embed:
-    variant = variant_at_position(card, variant_position)
+def build_card_embed(
+    card: CardDetail,
+    *,
+    variant_position: VariantRequest = 0,
+) -> discord.Embed:
+    resolved_variant_position = resolve_variant_position(card, variant_position)
+    variant = variant_at_position(card, resolved_variant_position)
     embed = discord.Embed(
         title=_truncate(card.name, EMBED_TITLE_LIMIT),
         url=poneglyph_card_url(card.card_number, card.language),
@@ -32,7 +39,7 @@ def build_card_embed(card: CardDetail, *, variant_position: int = 0) -> discord.
     )
     embed.set_footer(
         text=_truncate(
-            _card_footer(card, variant_position=variant_position),
+            _card_footer(card, variant_position=resolved_variant_position),
             _remaining_footer_budget(embed),
         )
     )
@@ -67,9 +74,14 @@ def build_card_embed(card: CardDetail, *, variant_position: int = 0) -> discord.
     return embed
 
 
-def _card_footer(card: CardDetail, *, variant_position: int = 0) -> str:
-    variant = variant_at_position(card, variant_position)
+def _card_footer(card: CardDetail, *, variant_position: VariantRequest = 0) -> str:
+    resolved_variant_position = resolve_variant_position(card, variant_position)
+    variant = variant_at_position(card, resolved_variant_position)
     footer_parts: list[str] = []
+    if len(card.variants) > 1:
+        footer_parts.append(
+            f"Variant {resolved_variant_position + 1}/{len(card.variants)}"
+        )
     if variant and variant.product.name:
         footer_parts.append(variant.product.name)
     if variant and variant.label:
