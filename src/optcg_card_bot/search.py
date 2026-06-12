@@ -69,6 +69,17 @@ def normalize_card_number(value: str) -> str:
     return value.strip().upper()
 
 
+MOSSHEAD_QUERY = "Zoro"
+MOSSHEAD_ALIASES = frozenset(("mosshead", "moss", "moss-head", "moss head"))
+
+
+def rewrite_card_query_alias(value: str) -> str:
+    stripped = value.strip()
+    if stripped.casefold() in MOSSHEAD_ALIASES:
+        return MOSSHEAD_QUERY
+    return stripped
+
+
 def extract_bracket_queries(content: str) -> list[str]:
     return [match.strip() for match in BRACKET_RE.findall(content) if match.strip()]
 
@@ -81,13 +92,14 @@ async def resolve_card_query(
     search_limit: int = 10,
 ) -> CardResolution:
     raw_query = query.strip()
+    backend_query = rewrite_card_query_alias(raw_query)
     if is_card_number(raw_query):
         card_number = normalize_card_number(raw_query)
         card = await client.get_card(card_number, lang=lang)
         return CardResolution(kind=ResolutionKind.DIRECT, query=raw_query, card=card)
 
     response = await client.search_cards(
-        raw_query,
+        backend_query,
         page=1,
         limit=search_limit,
         collapse="card",

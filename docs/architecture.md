@@ -59,6 +59,10 @@ bot-owned options, then pass the remaining query through unchanged.
 
 Important rules:
 
+- The only bot-owned query alias is an easter egg: whole-query `mosshead`,
+  `moss`, `moss-head`, and `moss head` values, case-insensitive, are sent to
+  Poneglyph as `Zoro` for card resolution and `/search`.
+
 - Bare words are broad Poneglyph free-text searches.
 - Quoted phrases, boolean operators, parentheses, negation, aliases, inline
   sorting, and comparison operators must be preserved.
