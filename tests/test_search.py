@@ -114,6 +114,17 @@ async def test_card_query_aliases_resolve_backend_queries(
 
 
 @pytest.mark.asyncio
+async def test_card_query_alias_preserves_surrounding_terms() -> None:
+    client = FakeClient()
+
+    resolution = await resolve_card_query(client, "purple dum-dum giant")
+
+    assert resolution.kind is ResolutionKind.MULTIPLE
+    assert resolution.card is None
+    assert client.queries_requested == ["purple Gum-Gum giant"]
+
+
+@pytest.mark.asyncio
 async def test_exactly_one_result_resolution_fetches_detail() -> None:
     client = FakeClient()
     returned_card_number = client.search_response.data[0].card_number

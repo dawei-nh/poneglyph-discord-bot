@@ -108,12 +108,26 @@ def _build_card_query_aliases(
     return aliases
 
 
+def _build_card_query_alias_pattern(aliases: dict[str, str]) -> re.Pattern[str]:
+    pattern = "|".join(
+        re.escape(alias) for alias in sorted(aliases, key=len, reverse=True)
+    )
+    return re.compile(
+        rf"(?<![A-Za-z0-9])(?:{pattern})(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+
+
 CARD_QUERY_ALIASES = _build_card_query_aliases(CARD_QUERY_ALIAS_GROUPS)
+CARD_QUERY_ALIAS_RE = _build_card_query_alias_pattern(CARD_QUERY_ALIASES)
 
 
 def rewrite_card_query_alias(value: str) -> str:
     stripped = value.strip()
-    return CARD_QUERY_ALIASES.get(stripped.casefold(), stripped)
+    return CARD_QUERY_ALIAS_RE.sub(
+        lambda match: CARD_QUERY_ALIASES[match.group(0).casefold()],
+        stripped,
+    )
 
 
 def extract_bracket_queries(content: str) -> list[str]:
