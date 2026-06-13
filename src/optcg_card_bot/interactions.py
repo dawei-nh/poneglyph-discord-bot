@@ -8,7 +8,13 @@ from discord.abc import Messageable
 from discord.ext import commands
 
 from optcg_card_bot.commands import CommandOutcome, CommandOutcomeKind, CommandService
-from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
+from optcg_card_bot.embeds import (
+    CardEmbedMode,
+    build_card_embed,
+    build_faq_embed,
+    build_price_embed,
+    normalize_card_embed_mode,
+)
 from optcg_card_bot.errors import BotError
 from optcg_card_bot.models import (
     CardDetail,
@@ -43,6 +49,10 @@ SEARCH_ORDER_CHOICES = [
     app_commands.Choice(name="asc", value="asc"),
     app_commands.Choice(name="desc", value="desc"),
 ]
+CARD_DISPLAY_CHOICES = [
+    app_commands.Choice(name=mode.value, value=mode.value) for mode in CardEmbedMode
+]
+
 PICKER_EXPIRED_MESSAGE = "This picker expired. Run the command again."
 MISSING_CHANNEL_ACCESS_MESSAGE = (
     "I couldn't post publicly in this channel. "
@@ -102,11 +112,13 @@ class VariantImageView(discord.ui.View):
         owner_id: int,
         card: CardDetail,
         variant_position: VariantRequest = 0,
+        display_mode: CardEmbedMode | str = CardEmbedMode.SUMMARY,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
         self.card = card
         self.variant_position = resolve_variant_position(card, variant_position)
+        self.display_mode = normalize_card_embed_mode(display_mode)
         self._public_message: EditableMessage | None = None
         self._control_message: EditableMessage | None = None
         self.add_item(VariantImageButton(label="Previous", variant_delta=-1))
@@ -150,6 +162,7 @@ class VariantImageView(discord.ui.View):
                 embed=build_card_embed(
                     self.card,
                     variant_position=self.variant_position,
+                    display_mode=self.display_mode,
                 )
             )
         except discord.HTTPException:
@@ -226,6 +239,7 @@ class CardSelect(discord.ui.Select[discord.ui.View]):
             outcome,
             public_channel=True,
             variant_position=view.variant_position,
+            display_mode=view.display_mode,
         )
 
 
@@ -240,6 +254,7 @@ class CardSelectView(discord.ui.View):
         service: CommandService | None = None,
         price_days: int = 30,
         variant_position: VariantRequest = 0,
+        display_mode: CardEmbedMode | str = CardEmbedMode.SUMMARY,
     ) -> None:
         super().__init__(timeout=180)
         self.owner_id = owner_id
@@ -248,6 +263,7 @@ class CardSelectView(discord.ui.View):
         self.service = service
         self.price_days = price_days
         self.variant_position = variant_position
+        self.display_mode = normalize_card_embed_mode(display_mode)
         self._message: EditableMessage | None = None
         self.add_item(CardSelect(choices))
 
@@ -301,6 +317,7 @@ class SearchResultsView(CardSelectView):
         sort: str | None = None,
         order: str | None = None,
         variant_position: VariantRequest = 0,
+        display_mode: CardEmbedMode | str = CardEmbedMode.SUMMARY,
     ) -> None:
         super().__init__(
             owner_id=owner_id,
@@ -309,6 +326,7 @@ class SearchResultsView(CardSelectView):
             choices=choices,
             service=service,
             variant_position=variant_position,
+            display_mode=display_mode,
         )
         self.page = page
         self.total = total
@@ -377,6 +395,7 @@ class SearchResultsView(CardSelectView):
             sort=self.sort,
             order=self.order,
             variant_position=self.variant_position,
+            display_mode=self.display_mode,
         )
         message = await interaction.edit_original_response(
             content=outcome.message,
@@ -405,6 +424,7 @@ def _variant_image_view(
     *,
     owner_id: int,
     variant_position: VariantRequest,
+    display_mode: CardEmbedMode | str,
 ) -> VariantImageView | None:
     if len(card.variants) <= 1:
         return None
@@ -412,6 +432,7 @@ def _variant_image_view(
         owner_id=owner_id,
         card=card,
         variant_position=variant_position,
+        display_mode=display_mode,
     )
 
 
@@ -492,9 +513,14 @@ async def send_outcome(
     *,
     public_channel: bool = False,
     variant_position: VariantRequest = 0,
+    display_mode: CardEmbedMode | str = CardEmbedMode.SUMMARY,
 ) -> None:
     if outcome.kind is CommandOutcomeKind.PUBLIC_CARD and outcome.card is not None:
-        embed = build_card_embed(outcome.card, variant_position=variant_position)
+        embed = build_card_embed(
+            outcome.card,
+            variant_position=variant_position,
+            display_mode=display_mode,
+        )
         await _send_public_embed(
             interaction,
             embed,
@@ -503,6 +529,7 @@ async def send_outcome(
                 outcome.card,
                 owner_id=interaction.user.id,
                 variant_position=variant_position,
+                display_mode=display_mode,
             ),
         )
         return
@@ -594,12 +621,17 @@ def create_bot(
     @app_commands.describe(
         query="Poneglyph query or card number",
         variant="Variant index or name to show first; examples: 0, alt, sp, manga",
+        display=(
+            "Card embed detail level; summary is compact, detailed is current full view"
+        ),
     )
+    @app_commands.choices(display=CARD_DISPLAY_CHOICES)
     @app_commands.autocomplete(query=autocomplete_cards)
     async def card(
         interaction: discord.Interaction,
         query: str,
         variant: str = "",
+        display: str = CardEmbedMode.SUMMARY.value,
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -619,6 +651,7 @@ def create_bot(
                     choices=outcome.choices,
                     service=service,
                     variant_position=variant,
+                    display_mode=display,
                 ),
             )
             return
@@ -627,6 +660,7 @@ def create_bot(
             outcome,
             public_channel=True,
             variant_position=variant,
+            display_mode=display,
         )
 
     @bot.tree.command(name="search", description="Browse Poneglyph search results")
@@ -635,8 +669,13 @@ def create_bot(
         sort="Optional Poneglyph sort field",
         order="Optional Poneglyph sort order",
         variant="Variant index or name to show first; examples: 0, alt, sp, manga",
+        display="Card embed detail level for posted selections",
     )
-    @app_commands.choices(sort=SEARCH_SORT_CHOICES, order=SEARCH_ORDER_CHOICES)
+    @app_commands.choices(
+        sort=SEARCH_SORT_CHOICES,
+        order=SEARCH_ORDER_CHOICES,
+        display=CARD_DISPLAY_CHOICES,
+    )
     @app_commands.autocomplete(query=autocomplete_cards)
     async def search(
         interaction: discord.Interaction,
@@ -644,6 +683,7 @@ def create_bot(
         sort: str | None = None,
         order: str | None = None,
         variant: str = "",
+        display: str = CardEmbedMode.SUMMARY.value,
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=True)
@@ -667,21 +707,32 @@ def create_bot(
                     sort=sort,
                     order=order,
                     variant_position=variant,
+                    display_mode=display,
                 ),
             )
             return
-        await send_outcome(interaction, outcome, variant_position=variant)
+        await send_outcome(
+            interaction,
+            outcome,
+            variant_position=variant,
+            display_mode=display,
+        )
 
     @bot.tree.command(name="random", description="Post a random Poneglyph card")
     @app_commands.describe(
         query="Optional Poneglyph query or simple random filters",
         variant="Variant index or name to show first; examples: 0, alt, sp, manga",
+        display=(
+            "Card embed detail level; summary is compact, detailed is current full view"
+        ),
     )
+    @app_commands.choices(display=CARD_DISPLAY_CHOICES)
     @app_commands.autocomplete(query=autocomplete_cards)
     async def random_card(
         interaction: discord.Interaction,
         query: str = "",
         variant: str = "",
+        display: str = CardEmbedMode.SUMMARY.value,
     ) -> None:
         service = _require_service(command_service)
         await interaction.response.defer(ephemeral=False)
@@ -690,7 +741,12 @@ def create_bot(
         except BotError as error:
             await send_error(interaction, error)
             return
-        await send_outcome(interaction, outcome, variant_position=variant)
+        await send_outcome(
+            interaction,
+            outcome,
+            variant_position=variant,
+            display_mode=display,
+        )
 
     @bot.tree.command(name="faq", description="Post official FAQ for a card")
     @app_commands.describe(card="Card number or Poneglyph query")

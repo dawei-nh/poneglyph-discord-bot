@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from optcg_card_bot.embeds import build_card_embed, build_faq_embed, build_price_embed
+from optcg_card_bot.embeds import (
+    CardEmbedMode,
+    build_card_embed,
+    build_faq_embed,
+    build_price_embed,
+)
 from optcg_card_bot.models import CardDetailResponse, FAQEntry, PricePoint
 
 FIXTURES = Path(__file__).parent / "fixtures" / "poneglyph"
@@ -49,7 +54,11 @@ def test_card_embed_uses_image_fallback() -> None:
 
 
 def test_card_embed_can_render_non_default_variant_image() -> None:
-    embed = build_card_embed(load_card(), variant_position=1)
+    embed = build_card_embed(
+        load_card(),
+        variant_position=1,
+        display_mode=CardEmbedMode.DETAILED,
+    )
 
     assert embed.image.url == (
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
@@ -79,14 +88,42 @@ def test_card_embed_clamps_requested_variant_to_available_range() -> None:
     )
 
 
-def test_card_embed_lists_variant_context() -> None:
-    embed = build_card_embed(load_card())
+def test_detailed_card_embed_lists_variant_context() -> None:
+    embed = build_card_embed(load_card(), display_mode=CardEmbedMode.DETAILED)
 
     variants = next(field for field in embed.fields if field.name == "Variants")
 
     assert "#0 Standard | Romance Dawn | Market: $1.91" in variants.value
     assert "#1 Alternate Art | Romance Dawn | Market: $558.38" in variants.value
     assert "#2 Alternate Art | 25th Edition | Market: $62.19" in variants.value
+
+
+def test_card_embed_defaults_to_summary_without_detail_spam() -> None:
+    embed = build_card_embed(load_card())
+
+    field_names = {field.name for field in embed.fields}
+
+    assert embed.description == "Leader | Red | Power 5000 | Life 5"
+    assert "Set" in field_names
+    assert "Number" in field_names
+    assert "Rarity" in field_names
+    assert "Attribute" in field_names
+    assert "Traits" in field_names
+    assert "Market" not in field_names
+    assert "Variants" not in field_names
+    assert "Legality" not in field_names
+    assert "[DON!! x1]" not in (embed.description or "")
+
+
+def test_card_embed_detailed_mode_matches_current_verbose_layout() -> None:
+    embed = build_card_embed(load_card(), display_mode="detailed")
+
+    field_names = {field.name for field in embed.fields}
+
+    assert "[DON!! x1]" in (embed.description or "")
+    assert "Market" in field_names
+    assert "Variants" in field_names
+    assert "Legality" in field_names
 
 
 def test_faq_embed_uses_official_faq_entries() -> None:

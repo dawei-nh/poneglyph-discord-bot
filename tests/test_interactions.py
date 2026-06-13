@@ -340,6 +340,22 @@ async def test_variant_image_view_next_button_updates_public_embed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_variant_image_view_preserves_detailed_display_mode() -> None:
+    interaction = FakeInteraction()
+    public_message = FakeEditableMessage()
+    view = VariantImageView(owner_id=123, card=load_card(), display_mode="detailed")
+    view.bind_public_message(public_message)
+    next_button = next(
+        item for item in view.children if getattr(item, "label", None) == "Next"
+    )
+
+    await next_button.callback(interaction)
+
+    field_names = {field.name for field in public_message.edits[0]["embed"].fields}
+    assert "Market" in field_names
+
+
+@pytest.mark.asyncio
 async def test_variant_image_view_only_allows_original_user() -> None:
     interaction = FakeInteraction()
     interaction.user = FakeUser(user_id=999)
@@ -445,9 +461,9 @@ def test_card_search_and_random_commands_accept_variant_defaults() -> None:
     bot = create_bot(command_service=None)
 
     expected_params = {
-        "card": {"query", "variant"},
-        "search": {"query", "sort", "order", "variant"},
-        "random": {"query", "variant"},
+        "card": {"query", "variant", "display"},
+        "search": {"query", "sort", "order", "variant", "display"},
+        "random": {"query", "variant", "display"},
     }
 
     for command_name, parameter_names in expected_params.items():
@@ -560,6 +576,20 @@ def test_card_oriented_commands_have_poneglyph_autocomplete() -> None:
         assert parameter.autocomplete is True
 
 
+def test_card_posting_commands_have_display_mode_choices() -> None:
+    bot = create_bot(command_service=FakeService())
+
+    for command_name in ("card", "search", "random"):
+        command = bot.tree.get_command(command_name)
+        assert command is not None
+        parameter = command.get_parameter("display")
+        assert parameter is not None
+        assert [choice.value for choice in parameter.choices] == [
+            "summary",
+            "detailed",
+        ]
+
+
 def test_create_bot_can_enable_bracket_listener() -> None:
     bot = create_bot(command_service=None, enable_bracket_messages=True)
 
@@ -602,6 +632,47 @@ async def test_public_outcome_after_private_defer_uses_channel_send() -> None:
     ]
     assert "Only you can see this" in interaction.followup.sends[0]["args"][0]
     assert isinstance(interaction.followup.sends[0]["view"], VariantImageView)
+
+
+@pytest.mark.asyncio
+async def test_public_card_outcome_defaults_to_summary_embed() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(interaction, outcome, public_channel=True)
+
+    embed = interaction.channel.sends[0]["embed"]
+    field_names = {field.name for field in embed.fields}
+    assert embed.description == "Leader | Red | Power 5000 | Life 5"
+    assert "Market" not in field_names
+    assert "Variants" not in field_names
+    assert "Legality" not in field_names
+
+
+@pytest.mark.asyncio
+async def test_public_card_outcome_allows_detailed_embed() -> None:
+    interaction = FakeInteraction()
+    outcome = CommandOutcome(
+        kind=CommandOutcomeKind.PUBLIC_CARD,
+        card=load_card(),
+    )
+
+    await send_outcome(
+        interaction,
+        outcome,
+        public_channel=True,
+        display_mode="detailed",
+    )
+
+    embed = interaction.channel.sends[0]["embed"]
+    field_names = {field.name for field in embed.fields}
+    assert "[DON!! x1]" in (embed.description or "")
+    assert "Market" in field_names
+    assert "Variants" in field_names
+    assert "Legality" in field_names
 
 
 @pytest.mark.asyncio
@@ -678,6 +749,40 @@ async def test_card_picker_selection_posts_publicly_and_replaces_picker() -> Non
     assert "embed" in interaction.channel.sends[0]
     assert interaction.deleted_original_response is True
     assert isinstance(interaction.followup.sends[0]["view"], VariantImageView)
+
+
+@pytest.mark.asyncio
+async def test_card_picker_selection_preserves_requested_display_mode() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    view = CardSelectView(
+        owner_id=123,
+        source_query="zoro",
+        action="card",
+        choices=(
+            CardChoice(
+                card_number="OP01-001",
+                name="Roronoa Zoro",
+                set_code="OP01",
+                card_type="Leader",
+                color=("Red",),
+            ),
+        ),
+        service=service,
+        display_mode="detailed",
+    )
+    select = view.children[0]
+    select._values = ["OP01-001"]
+
+    await select.callback(interaction)
+
+    field_names = {field.name for field in interaction.channel.sends[0]["embed"].fields}
+    assert "Market" in field_names
 
 
 @pytest.mark.asyncio
@@ -1420,6 +1525,25 @@ async def test_card_command_resolves_named_variant_alias() -> None:
         "https://cdn.poneglyph.one/images/OP01-001/en/stock/1/full.png"
     )
     assert interaction.followup.sends[0]["view"].variant_position == 1
+
+
+@pytest.mark.asyncio
+async def test_card_command_uses_requested_display_mode() -> None:
+    interaction = FakeInteraction()
+    service = FakeService(
+        CommandOutcome(
+            kind=CommandOutcomeKind.PUBLIC_CARD,
+            card=load_card(),
+        )
+    )
+    bot = create_bot(command_service=service)
+    command = bot.tree.get_command("card")
+    assert command is not None
+
+    await command.callback(interaction, "OP01-001", "", "detailed")
+
+    field_names = {field.name for field in interaction.channel.sends[0]["embed"].fields}
+    assert "Market" in field_names
 
 
 @pytest.mark.asyncio

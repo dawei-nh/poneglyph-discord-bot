@@ -250,9 +250,12 @@ class CommandService:
             kind=CommandOutcomeKind.EPHEMERAL_MESSAGE,
             message=(
                 "Commands:\n"
-                "`/card query:<query>` posts an unambiguous card or opens a picker.\n"
-                "`/search query:<query>` opens private search results.\n"
-                "`/random query:<optional query>` posts a random card.\n"
+                "`/card query:<query> display:<summary|detailed>` posts a card "
+                "or opens a picker.\n"
+                "`/search query:<query> display:<summary|detailed>` opens private "
+                "search results.\n"
+                "`/random query:<optional query> display:<summary|detailed>` "
+                "posts a random card.\n"
                 "`/faq card:<card>` posts official FAQ entries only.\n"
                 "`/price card:<card> days:<optional days>` posts price history.\n"
                 "Poneglyph syntax: https://poneglyph.one/syntax"

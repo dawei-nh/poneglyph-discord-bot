@@ -39,11 +39,13 @@ the first returned result with a caution note that it may be incorrect.
   exactly-one search result is unambiguous.
 - `/search` remains private-first even when a page contains one result because
   its intent is browsing.
-- `/card`, `/search`, and `/random` accept an optional `variant` selector for
-  the initial card image. Numeric selectors clamp to the nearest available
-  variant; named selectors match variant names, labels, product context, and
-  short aliases such as `alt`, `sp`, and `manga`. Missing or unmatched values use
-  variant `0`.
+- `/card`, `/search`, and `/random` accept optional `variant` and `display`
+  selectors. `variant` chooses the initial card image; numeric selectors clamp to
+  the nearest available variant, while named selectors match variant names,
+  labels, product context, and short aliases such as `alt`, `sp`, and `manga`.
+  Missing or unmatched variants use variant `0`. `display` defaults to compact
+  `summary`; `detailed` renders the full card text, market, variant, and legality
+  fields.
 - Pickers and paged controls are scoped to the user who invoked the command.
 - Selected picker cards post through the same public channel path as direct
   matches, then remove the original ephemeral response and send owner-only
@@ -129,10 +131,11 @@ remove real complexity or match an established boundary.
 
 ## Embed Rules
 
-Single-card embeds should include the card name, Poneglyph card URL, best
-available image, compact gameplay/card text, set and card number, rarity, type
-and color, core stats, traits, legality, price when available, variant context,
-and a Poneglyph footer.
+Single-card embeds default to `summary`: card name, Poneglyph card URL, best
+available image, compact type/color/stats, set and card number, rarity,
+attribute, traits, variant footer context, and a Poneglyph footer. `detailed`
+mode keeps the previous verbose layout by adding full effect/trigger text,
+legality, market when available, and variant context fields.
 
 Image selection order:
 
@@ -149,13 +152,13 @@ Price output must avoid asserting that volatile market data is present. If a
 price response lacks optional values, render the useful available fields or a
 clear no-data message.
 
-Variant output should stay compact: show variant indexes, labels, products, and
-best available market value when present so users can distinguish standard,
-alternate-art, promo, and product-specific printings. Public card embeds keep
-variant controls out of the public component row; cards with multiple images
-provide owner-only ephemeral controls after the public card post. Controls cycle
-the public embed's primary image, footer context, and market value without
-changing the selected card.
+Variant output in detailed embeds should stay compact: show variant indexes,
+labels, products, and best available market value when present so users can
+distinguish standard, alternate-art, promo, and product-specific printings.
+Public card embeds keep variant controls out of the public component row; cards
+with multiple images provide owner-only ephemeral controls after the public card
+post. Controls cycle the public embed's primary image, footer context, and
+market value in detailed mode without changing the selected card.
 
 ## Deployment Shape
 
