@@ -116,16 +116,36 @@ async def test_search_always_returns_picker() -> None:
     assert outcome.message == "Search results | Page 1 | 126 total"
 
 
-@pytest.mark.parametrize("query", ["Mosshead", "MOSS", "moss-head", "moss head"])
+@pytest.mark.parametrize(
+    ("query", "backend_query"),
+    [
+        ("Mosshead", "Zoro"),
+        ("MOSS", "Zoro"),
+        ("moss-head", "Zoro"),
+        ("moss head", "Zoro"),
+        ("curlybrows", "Sanji"),
+        ("dumdum", "Gum-Gum"),
+        ("dum-dum", "Gum-Gum"),
+        ("dum dum", "Gum-Gum"),
+        ("mamaregan", "mamaragan"),
+        ("mama-regan", "mamaragan"),
+        ("mama regan", "mamaragan"),
+        ("curly-brows", "Sanji"),
+        ("curly brows", "Sanji"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_search_mosshead_aliases_query_zoro(query: str) -> None:
+async def test_search_card_query_aliases_use_backend_query(
+    query: str,
+    backend_query: str,
+) -> None:
     client = FakeClient()
     service = CommandService(client)
 
     outcome = await service.search(query)
 
     assert outcome.kind is CommandOutcomeKind.PICKER
-    assert client.search_kwargs["query"] == "Zoro"
+    assert client.search_kwargs["query"] == backend_query
 
 
 @pytest.mark.asyncio

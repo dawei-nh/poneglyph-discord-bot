@@ -69,15 +69,51 @@ def normalize_card_number(value: str) -> str:
     return value.strip().upper()
 
 
-MOSSHEAD_QUERY = "Zoro"
-MOSSHEAD_ALIASES = frozenset(("mosshead", "moss", "moss-head", "moss head"))
+@dataclass(frozen=True, slots=True)
+class CardQueryAlias:
+    backend_query: str
+    aliases: tuple[str, ...]
+
+
+CARD_QUERY_ALIAS_GROUPS = (
+    CardQueryAlias(
+        backend_query="Zoro",
+        aliases=("mosshead", "moss", "moss-head", "moss head"),
+    ),
+    CardQueryAlias(
+        backend_query="Sanji",
+        aliases=("curlybrows", "curly-brows", "curly brows"),
+    ),
+    CardQueryAlias(
+        backend_query="Gum-Gum",
+        aliases=("dumdum", "dum-dum", "dum dum"),
+    ),
+    CardQueryAlias(
+        backend_query="mamaragan",
+        aliases=("mamaregan", "mama-regan", "mama regan"),
+    ),
+)
+
+
+def _build_card_query_aliases(
+    groups: tuple[CardQueryAlias, ...],
+) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for group in groups:
+        for alias in group.aliases:
+            key = alias.casefold()
+            if key in aliases:
+                raise ValueError(f"Duplicate card query alias: {alias}")
+            aliases[key] = group.backend_query
+    return aliases
+
+
+CARD_QUERY_ALIASES = _build_card_query_aliases(CARD_QUERY_ALIAS_GROUPS)
 
 
 def rewrite_card_query_alias(value: str) -> str:
     stripped = value.strip()
-    if stripped.casefold() in MOSSHEAD_ALIASES:
-        return MOSSHEAD_QUERY
-    return stripped
+    return CARD_QUERY_ALIASES.get(stripped.casefold(), stripped)
 
 
 def extract_bracket_queries(content: str) -> list[str]:
