@@ -149,6 +149,17 @@ async def test_search_card_query_aliases_use_backend_query(
 
 
 @pytest.mark.asyncio
+async def test_search_card_query_alias_preserves_surrounding_terms() -> None:
+    client = FakeClient()
+    service = CommandService(client)
+
+    outcome = await service.search("purple dum-dum giant")
+
+    assert outcome.kind is CommandOutcomeKind.PICKER
+    assert client.search_kwargs["query"] == "purple Gum-Gum giant"
+
+
+@pytest.mark.asyncio
 async def test_search_outcome_includes_pagination() -> None:
     client = FakeClient()
     client.search_response = client.search_response.model_copy(
