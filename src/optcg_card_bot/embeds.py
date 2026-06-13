@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 import discord
 
 from optcg_card_bot.models import (
@@ -25,13 +27,29 @@ EMBED_TOTAL_TEXT_LIMIT = 6000
 POWERED_BY = "Powered by Poneglyph"
 
 
+class CardEmbedMode(StrEnum):
+    SUMMARY = "summary"
+    DETAILED = "detailed"
+
+
+def normalize_card_embed_mode(value: CardEmbedMode | str) -> CardEmbedMode:
+    if isinstance(value, CardEmbedMode):
+        return value
+    try:
+        return CardEmbedMode(value.casefold())
+    except ValueError:
+        return CardEmbedMode.SUMMARY
+
+
 def build_card_embed(
     card: CardDetail,
     *,
     variant_position: VariantRequest = 0,
+    display_mode: CardEmbedMode | str = CardEmbedMode.SUMMARY,
 ) -> discord.Embed:
     resolved_variant_position = resolve_variant_position(card, variant_position)
     variant = variant_at_position(card, resolved_variant_position)
+    resolved_display_mode = normalize_card_embed_mode(display_mode)
     embed = discord.Embed(
         title=_truncate(card.name, EMBED_TITLE_LIMIT),
         url=poneglyph_card_url(card.card_number, card.language),
@@ -43,34 +61,29 @@ def build_card_embed(
             _remaining_footer_budget(embed),
         )
     )
+    description = (
+        _card_description(card)
+        if resolved_display_mode is CardEmbedMode.DETAILED
+        else _card_summary_description(card)
+    )
     embed.description = _truncate(
-        _card_description(card),
+        description,
         min(EMBED_DESCRIPTION_LIMIT, _remaining_text_budget(embed)),
     )
     image_url = best_image_url(variant)
     if image_url:
         embed.set_image(url=image_url)
-    _add_field_if_fits(embed, "Set", f"{card.set_name} ({card.set})", inline=True)
-    _add_field_if_fits(embed, "Number", card.card_number, inline=True)
-    _add_field_if_fits(embed, "Rarity", card.rarity or "Unknown", inline=True)
-    if card.attribute:
-        _add_field_if_fits(
-            embed,
-            "Attribute",
-            ", ".join(card.attribute),
-            inline=True,
-        )
-    if card.types:
-        _add_field_if_fits(embed, "Traits", ", ".join(card.types), inline=False)
-    price = best_price(variant)
-    if price:
-        _add_field_if_fits(embed, "Market", f"${price}", inline=True)
-    variants = _variant_field_value(card)
-    if variants:
-        _add_field_if_fits(embed, "Variants", variants, inline=False)
-    legality = _format_legality(card)
-    if legality:
-        _add_field_if_fits(embed, "Legality", legality, inline=False)
+    _add_card_summary_fields(embed, card)
+    if resolved_display_mode is CardEmbedMode.DETAILED:
+        price = best_price(variant)
+        if price:
+            _add_field_if_fits(embed, "Market", f"${price}", inline=True)
+        variants = _variant_field_value(card)
+        if variants:
+            _add_field_if_fits(embed, "Variants", variants, inline=False)
+        legality = _format_legality(card)
+        if legality:
+            _add_field_if_fits(embed, "Legality", legality, inline=False)
     return embed
 
 
@@ -143,6 +156,36 @@ def build_price_embed(
         ):
             break
     return embed
+
+
+def _card_summary_description(card: CardDetail) -> str:
+    stat_parts = [card.card_type]
+    if card.color:
+        stat_parts.append("/".join(card.color))
+    if card.cost is not None:
+        stat_parts.append(f"Cost {card.cost}")
+    if card.power is not None:
+        stat_parts.append(f"Power {card.power}")
+    if card.counter is not None:
+        stat_parts.append(f"Counter {card.counter}")
+    if card.life is not None:
+        stat_parts.append(f"Life {card.life}")
+    return " | ".join(stat_parts)
+
+
+def _add_card_summary_fields(embed: discord.Embed, card: CardDetail) -> None:
+    _add_field_if_fits(embed, "Set", f"{card.set_name} ({card.set})", inline=True)
+    _add_field_if_fits(embed, "Number", card.card_number, inline=True)
+    _add_field_if_fits(embed, "Rarity", card.rarity or "Unknown", inline=True)
+    if card.attribute:
+        _add_field_if_fits(
+            embed,
+            "Attribute",
+            ", ".join(card.attribute),
+            inline=True,
+        )
+    if card.types:
+        _add_field_if_fits(embed, "Traits", ", ".join(card.types), inline=False)
 
 
 def _card_description(card: CardDetail) -> str:
