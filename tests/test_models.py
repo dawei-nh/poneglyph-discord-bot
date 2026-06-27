@@ -21,6 +21,19 @@ def test_card_detail_fixture_parses() -> None:
     assert response.data.official_faq
 
 
+def test_card_detail_accepts_upstream_card_image_ids() -> None:
+    payload = json.loads((FIXTURES / "card_op01_001.json").read_text())
+    payload["data"]["variants"][0]["card_image_id"] = (
+        "0eb669e0-c50b-4076-b734-150d6952f0ef"
+    )
+
+    response = CardDetailResponse.model_validate(payload)
+
+    assert response.data.variants[0].card_image_id == (
+        "0eb669e0-c50b-4076-b734-150d6952f0ef"
+    )
+
+
 def test_search_fixture_parses_without_detail_only_fields() -> None:
     payload = json.loads((FIXTURES / "search_luffy.json").read_text())
 
