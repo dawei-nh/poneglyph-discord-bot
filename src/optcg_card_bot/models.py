@@ -68,6 +68,7 @@ class CardVariant(StrictModel):
     images: VariantImages
     errata: list[dict[str, Any]]
     market: Market
+    card_image_id: str | None = None
 
 
 class LegalityEntry(BaseModel):
